@@ -21,7 +21,7 @@ NOW = datetime(2026, 10, 31, 9, 0, tzinfo=UTC)
 
 
 def a_token(db: Session) -> Token:
-    return create_token(db, kind="global", name="t", created_by="test", expires_at=None)[0]
+    return create_token(db, kind="global", name="t", actor="test", expires_at=None)[0]
 
 
 def test_same_report_stored_meanwhile(

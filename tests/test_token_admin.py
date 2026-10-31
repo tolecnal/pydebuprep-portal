@@ -130,7 +130,7 @@ def test_api_token_admin(admin: TestClient, bearer: Bearer, db: Session) -> None
     assert set(data) == {"id", "token"} and TOKEN.fullmatch(data["token"])
     listed = admin.get("/api/v1/tokens", headers=headers).json()["tokens"]
     assert [t["name"] for t in listed] == ["api"]
-    assert set(listed[0]) == {"id", "kind", "name", "public_id", "created_by", "created_at",
+    assert set(listed[0]) == {"id", "kind", "name", "public_id", "team", "host_name", "created_by", "created_at",
                               "expires_at", "revoked_at", "last_used_at"}  # fmt: skip
     hashed = db.query(Token).one().secret_hash
     assert hashed not in resp.text and hashed not in str(listed)

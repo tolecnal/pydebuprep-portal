@@ -11,9 +11,11 @@ from pydebuprep.checks import ALL_CHECKS
 from pydebuprep.render import FORMATS
 from sqlalchemy.orm import Session
 
-from pydebuprep_portal.access import Viewer
+from pydebuprep_portal.access import Viewer, may_manage_tokens, may_read_tokens
+from pydebuprep_portal.audit import actor_of
 from pydebuprep_portal.auth import page_viewer
 from pydebuprep_portal.db import get_session
+from pydebuprep_portal.models import Team
 from pydebuprep_portal.queries import (
     get_report,
     host_timeline,
@@ -30,6 +32,7 @@ from pydebuprep_portal.rendering import (
     render_stored,
 )
 from pydebuprep_portal.security import DOCS_CSP, require_csrf
+from pydebuprep_portal.teams import visible_team
 from pydebuprep_portal.templating import error_page, page, templates
 from pydebuprep_portal.tokens import create_token, list_tokens, revoke_token, token_request
 
@@ -178,9 +181,22 @@ def _tokens_page(
     return page(request, "tokens.html", viewer, status_code, tokens=list_tokens(session), **context)
 
 
+def _new_token_response(response: HTMLResponse) -> HTMLResponse:
+    response.headers["Cache-Control"] = "no-store"  # the page shows a token, once
+    return response
+
+
+def _token_request(name: str, expires_days: str) -> tuple[str, datetime | None]:
+    try:
+        days = int(expires_days) if expires_days.strip() else None
+    except ValueError:
+        raise ValueError("expiry must be a number of days") from None
+    return token_request(name, days, datetime.now(UTC))
+
+
 @router.get("/tokens", response_class=HTMLResponse)
 def tokens_page(request: Request, viewer: ViewerDep, session: SessionDep) -> HTMLResponse:
-    if not viewer.reads_all:
+    if not may_read_tokens(viewer, None):
         return _forbidden(request)
     return _tokens_page(request, viewer, session)
 
@@ -193,24 +209,18 @@ def create_token_page(
     name: Annotated[str, Form()] = "",
     expires_days: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
-    if not viewer.is_admin:
+    if not may_manage_tokens(viewer, "global", None):
         return _forbidden(request)
     try:
-        days = int(expires_days) if expires_days.strip() else None
-        clean, expires = token_request(name, days, datetime.now(UTC))
+        clean, expires = _token_request(name, expires_days)
     except ValueError as exc:
-        message = str(exc) if "token" in str(exc) else "expiry must be a number of days"
-        return _tokens_page(request, viewer, session, 422, error=message, form_name=name)
+        return _tokens_page(request, viewer, session, 422, error=str(exc), form_name=name)
     _, plain = create_token(
-        session,
-        kind="global",
-        name=clean,
-        created_by=f"{viewer.name} <{viewer.subject}>",
-        expires_at=expires,
+        session, kind="global", name=clean, actor=actor_of(viewer), expires_at=expires
     )
-    response = _tokens_page(request, viewer, session, new_token=plain, new_name=clean)
-    response.headers["Cache-Control"] = "no-store"
-    return response
+    return _new_token_response(
+        _tokens_page(request, viewer, session, new_token=plain, new_name=clean)
+    )
 
 
 @router.post("/tokens/{token_id}/revoke", dependencies=[Depends(require_csrf)])
@@ -219,9 +229,80 @@ def revoke_token_page(
 ) -> Response:
     if not viewer.is_admin:
         return _forbidden(request)
-    if not revoke_token(session, token_id, datetime.now(UTC)):
+    if not revoke_token(session, token_id, datetime.now(UTC), actor_of(viewer)):
         return error_page(request, 404, "Not found", "There is no such token.")
     return RedirectResponse("/tokens", status_code=303)
+
+
+def _team_not_found(request: Request) -> HTMLResponse:
+    return error_page(request, 404, "Not found", "There is no such team, or you can't see it.")
+
+
+def _team_page(
+    request: Request, viewer: Viewer, session: Session, team: Team, status_code: int = 200,
+    **context: object,
+) -> HTMLResponse:  # fmt: skip
+    tokens = list_tokens(session, team.id) if may_read_tokens(viewer, team.name) else None
+    return page(
+        request, "team.html", viewer, status_code, team=team, tokens=tokens,
+        may_manage=may_manage_tokens(viewer, "team", team.name), **context,
+    )  # fmt: skip
+
+
+@router.get("/teams/{name}", response_class=HTMLResponse)
+def team_page(request: Request, name: str, viewer: ViewerDep, session: SessionDep) -> HTMLResponse:
+    team = visible_team(session, viewer, name)
+    if team is None:
+        return _team_not_found(request)
+    return _team_page(request, viewer, session, team)
+
+
+@router.post(
+    "/teams/{name}/tokens", response_class=HTMLResponse, dependencies=[Depends(require_csrf)]
+)
+# token_name is a label, not a secret.
+def create_team_token_page(  # nosec B107
+    request: Request,
+    name: str,
+    viewer: ViewerDep,
+    session: SessionDep,
+    kind: Annotated[str, Form()] = "team",
+    token_name: Annotated[str, Form(alias="name")] = "",
+    host_name: Annotated[str, Form()] = "",
+    expires_days: Annotated[str, Form()] = "",
+) -> HTMLResponse:
+    team = visible_team(session, viewer, name)
+    if team is None:
+        return _team_not_found(request)
+    if not may_manage_tokens(viewer, "team", team.name):
+        return _forbidden(request)
+    try:
+        if kind not in ("team", "host"):
+            raise ValueError("a team's token is a team token or a host token")
+        clean, expires = _token_request(token_name, expires_days)
+        _, plain = create_token(
+            session, kind=kind, name=clean, actor=actor_of(viewer), expires_at=expires,
+            team_id=team.id, host_name=(host_name if kind == "host" else None),
+        )  # fmt: skip
+    except ValueError as exc:
+        return _team_page(request, viewer, session, team, 422, error=str(exc))
+    return _new_token_response(
+        _team_page(request, viewer, session, team, new_token=plain, new_name=clean)
+    )
+
+
+@router.post("/teams/{name}/tokens/{token_id}/revoke", dependencies=[Depends(require_csrf)])
+def revoke_team_token_page(
+    request: Request, name: str, token_id: int, viewer: ViewerDep, session: SessionDep
+) -> Response:
+    team = visible_team(session, viewer, name)
+    if team is None:
+        return _team_not_found(request)
+    if not may_manage_tokens(viewer, "team", team.name):
+        return _forbidden(request)
+    if not revoke_token(session, token_id, datetime.now(UTC), actor_of(viewer), team.id):
+        return error_page(request, 404, "Not found", "There is no such token in this team.")
+    return RedirectResponse(f"/teams/{team.name}", status_code=303)
 
 
 @router.get("/docs", response_class=HTMLResponse)

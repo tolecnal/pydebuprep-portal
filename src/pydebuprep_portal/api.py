@@ -11,10 +11,12 @@ from pydebuprep.render import FORMATS
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from pydebuprep_portal.access import Viewer
+from pydebuprep_portal.access import Viewer, may_manage_tokens, may_read_tokens
+from pydebuprep_portal.audit import actor_of
 from pydebuprep_portal.auth import api_viewer
 from pydebuprep_portal.db import get_session
 from pydebuprep_portal.ingest import IngestError, check_headers, read_body, store_report
+from pydebuprep_portal.models import Team, Token
 from pydebuprep_portal.queries import (
     ReportRow,
     get_report,
@@ -28,6 +30,7 @@ from pydebuprep_portal.queries import (
 from pydebuprep_portal.rendering import MEDIA_TYPES, render_stored
 from pydebuprep_portal.settings import Settings
 from pydebuprep_portal.settings_store import get_settings
+from pydebuprep_portal.teams import visible_team
 from pydebuprep_portal.tokens import (
     MAX_EXPIRES_DAYS,
     MAX_NAME,
@@ -278,11 +281,18 @@ class TokenOut(BaseModel):
     kind: str
     name: str
     public_id: str
+    team: str | None
+    host_name: str | None
     created_by: str
     created_at: datetime
     expires_at: datetime | None
     revoked_at: datetime | None
     last_used_at: datetime | None
+
+    @classmethod
+    def of(cls, token: Token) -> TokenOut:
+        fields = {f: getattr(token, f) for f in cls.model_fields if f != "team"}
+        return cls(**fields, team=token.team.name if token.team else None)
 
 
 class TokenList(BaseModel):
@@ -294,51 +304,107 @@ class TokenRequest(BaseModel):
     expires_days: int | None = Field(None, ge=1, le=MAX_EXPIRES_DAYS)
 
 
+class TeamTokenRequest(TokenRequest):
+    kind: Literal["team", "host"]
+    host_name: str | None = Field(None, description="For a host token: the one host it is for")
+
+
 class NewToken(BaseModel):
     id: int
     token: str = Field(description="Shown this once; the portal keeps only its hash")
 
 
 FORBIDDEN = HTTPException(403, "your roles don't allow this")
-TOKEN_FIELDS = tuple(TokenOut.model_fields)
+NO_TEAM = HTTPException(404, "no such team")
+TEAM_NOT_FOUND: dict[int | str, dict[str, Any]] = {
+    404: {"description": "No such team, or not visible to you"}
+}
 
 
-@router.get("/tokens", summary="Upload tokens (admins and auditors)")
+def _new_token(
+    session: Session, viewer: Viewer, request: TokenRequest, kind: str,
+    team_id: int | None = None, host_name: str | None = None,
+) -> NewToken:  # fmt: skip
+    try:
+        name, expires = token_request(request.name, request.expires_days, datetime.now(UTC))
+        token, plain = create_token(
+            session, kind=kind, name=name, actor=actor_of(viewer), expires_at=expires,
+            team_id=team_id, host_name=host_name,
+        )  # fmt: skip
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return NewToken(id=token.id, token=plain)
+
+
+@router.get("/tokens", summary="Every upload token (admins and auditors)")
 def tokens(viewer: ViewerDep, session: SessionDep) -> TokenList:
-    if not viewer.reads_all:
+    if not may_read_tokens(viewer, None):
         raise FORBIDDEN
-    return TokenList(
-        tokens=[TokenOut(**{f: getattr(t, f) for f in TOKEN_FIELDS}) for t in list_tokens(session)]
-    )
+    return TokenList(tokens=[TokenOut.of(t) for t in list_tokens(session)])
 
 
 @router.post("/tokens", status_code=201, summary="Create a global upload token (admins)")
 def new_token(request: TokenRequest, viewer: ViewerDep, session: SessionDep) -> NewToken:
-    if not viewer.is_admin:
+    if not may_manage_tokens(viewer, "global", None):
         raise FORBIDDEN
-    try:
-        name, expires = token_request(request.name, request.expires_days, datetime.now(UTC))
-    except ValueError as exc:
-        raise HTTPException(422, str(exc)) from None
-    token, plain = create_token(
-        session,
-        kind="global",
-        name=name,
-        created_by=f"{viewer.name} <{viewer.subject}>",
-        expires_at=expires,
-    )
-    return NewToken(id=token.id, token=plain)
+    return _new_token(session, viewer, request, "global")
 
 
 @router.delete(
     "/tokens/{token_id}",
     status_code=204,
-    summary="Revoke an upload token (admins)",
+    summary="Revoke any upload token (admins)",
     responses={404: {"description": "No such token"}},
 )
 def delete_token(token_id: int, viewer: ViewerDep, session: SessionDep) -> Response:
     if not viewer.is_admin:
         raise FORBIDDEN
-    if not revoke_token(session, token_id, datetime.now(UTC)):
+    if not revoke_token(session, token_id, datetime.now(UTC), actor_of(viewer)):
         raise HTTPException(404, "no such token")
+    return Response(status_code=204)
+
+
+def _team(session: Session, viewer: Viewer, name: str) -> Team:
+    team = visible_team(session, viewer, name)
+    if team is None:
+        raise NO_TEAM
+    return team
+
+
+@router.get("/teams/{name}/tokens", summary="A team's tokens", responses=TEAM_NOT_FOUND)
+def team_tokens(name: str, viewer: ViewerDep, session: SessionDep) -> TokenList:
+    """Admins, auditors and the team's leads."""
+    team = _team(session, viewer, name)
+    if not may_read_tokens(viewer, team.name):
+        raise FORBIDDEN
+    return TokenList(tokens=[TokenOut.of(t) for t in list_tokens(session, team.id)])
+
+
+@router.post(
+    "/teams/{name}/tokens",
+    status_code=201,
+    summary="Create a team or host token (admins, the team's leads)",
+    responses=TEAM_NOT_FOUND,
+)
+def new_team_token(
+    name: str, request: TeamTokenRequest, viewer: ViewerDep, session: SessionDep
+) -> NewToken:
+    team = _team(session, viewer, name)
+    if not may_manage_tokens(viewer, request.kind, team.name):
+        raise FORBIDDEN
+    return _new_token(session, viewer, request, request.kind, team.id, request.host_name)
+
+
+@router.delete(
+    "/teams/{name}/tokens/{token_id}",
+    status_code=204,
+    summary="Revoke a team's token (admins, the team's leads)",
+    responses=TEAM_NOT_FOUND,
+)
+def delete_team_token(name: str, token_id: int, viewer: ViewerDep, session: SessionDep) -> Response:
+    team = _team(session, viewer, name)
+    if not may_manage_tokens(viewer, "team", team.name):
+        raise FORBIDDEN
+    if not revoke_token(session, token_id, datetime.now(UTC), actor_of(viewer), team.id):
+        raise HTTPException(404, "no such token in this team")
     return Response(status_code=204)

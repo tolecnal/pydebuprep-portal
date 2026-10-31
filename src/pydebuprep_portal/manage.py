@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     engine = make_engine(settings.database_url)
     with make_sessionmaker(engine)() as session:
         _, plain = create_token(
-            session, kind="global", name=name, created_by="manage", expires_at=expires
+            session, kind="global", name=name, actor="manage", expires_at=expires
         )
     engine.dispose()
     print(plain)

@@ -1,0 +1,27 @@
+{% if tokens %}
+<table>
+  <thead><tr><th>Name</th><th>Kind</th><th>Team</th><th>Host</th><th>Id</th><th>Created</th><th>Expires</th><th>Last used</th><th>State</th><th></th></tr></thead>
+  <tbody>
+  {% for token in tokens %}
+  <tr>
+    <td>{{ token.name }}</td>
+    <td>{{ token.kind }}</td>
+    <td>{% if token.team %}<a href="/teams/{{ token.team.name }}">{{ token.team.name }}</a>{% endif %}</td>
+    <td>{{ token.host_name or "" }}</td>
+    <td><code>pdp_{{ token.public_id }}_…</code></td>
+    <td>{{ token.created_at | utc }}<br><span class="empty">{{ token.created_by }}</span></td>
+    <td>{% if token.expires_at %}{{ token.expires_at | utc }}{% else %}never{% endif %}</td>
+    <td>{% if token.last_used_at %}{{ token.last_used_at | utc }}{% else %}never{% endif %}</td>
+    <td>{% if token.revoked_at %}revoked {{ token.revoked_at | utc }}{% else %}active{% endif %}</td>
+    <td>{% if may_revoke and not token.revoked_at %}
+      <form method="post" action="{{ revoke_base }}/{{ token.id }}/revoke" class="inline">
+        <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+        <button type="submit">Revoke</button>
+      </form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No tokens yet.</p>
+{% endif %}

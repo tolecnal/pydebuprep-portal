@@ -125,7 +125,7 @@ def api(make_client: Callable[..., TestClient]) -> TestClient:
 
 @pytest.fixture
 def token(db: Session) -> str:
-    return create_token(db, kind="global", name="test", created_by="test", expires_at=None)[1]
+    return create_token(db, kind="global", name="test", actor="test", expires_at=None)[1]
 
 
 @dataclass
@@ -195,7 +195,7 @@ def csrf_of(client: TestClient) -> str:
 @pytest.fixture
 def add_report(db: Session) -> Callable[..., Report]:
     """Store a sample report (keyword arguments as for sample.sample_json)."""
-    stored_token = create_token(db, kind="global", name="fixture", created_by="test",
+    stored_token = create_token(db, kind="global", name="fixture", actor="test",
                                 expires_at=None)[0]  # fmt: skip
     received = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
 

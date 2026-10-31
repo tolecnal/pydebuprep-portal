@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ team.name }} — pydebuprep portal{% endblock %}
+{% block main %}
+<h1>Team {{ team.name }}</h1>
+<p>{% if team.public %}Public: everyone signed in reads its reports.{% else %}Private: its members, admins and auditors read its reports.{% endif %}</p>
+{% if tokens is not none %}
+<h2>Upload tokens</h2>
+{% if new_token %}
+<div class="notice">
+  <p>The token <strong>{{ new_name }}</strong> — copy it now, it won't be shown again:</p>
+  <p><code class="secret">{{ new_token }}</code></p>
+</div>
+{% endif %}
+{% if error %}<p class="notice">{{ error }}</p>{% endif %}
+{% if may_manage %}
+<form class="filters" method="post" action="/teams/{{ team.name }}/tokens">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <label>Kind
+    <select name="kind"><option value="team">team: any host of the team</option><option value="host">host: one host only</option></select>
+  </label>
+  <label>Name <input name="name" maxlength="100" required></label>
+  <label>Host (host tokens) <input name="host_name" maxlength="253"></label>
+  <label>Expires after (days, empty for never) <input name="expires_days" inputmode="numeric" size="6"></label>
+  <button type="submit">Create a token</button>
+</form>
+{% endif %}
+{% set revoke_base = "/teams/" ~ team.name ~ "/tokens" %}{% set may_revoke = may_manage %}
+{% include "_token_table.html" %}
+{% endif %}
+{% endblock %}

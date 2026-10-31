@@ -78,16 +78,21 @@ def parse(body: bytes) -> ReportData:
     except RecursionError:
         raise IngestError(422, "the report is nested too deeply") from None
     hostname = report.host.hostname
-    if (
-        not hostname
-        or len(hostname) > MAX_HOSTNAME
-        or not hostname.isprintable()
-        or (any(c.isspace() for c in hostname))
-    ):
+    if not valid_host_name(hostname):
         raise IngestError(422, f"host.hostname is not a host name: {hostname!r}")
     if _has_nul(report.to_dict()):
         raise IngestError(422, "the report contains a NUL character, which can't be stored")
     return report
+
+
+def valid_host_name(name: str) -> bool:
+    """A host name as reports carry it: printable, no whitespace, at most 253 characters."""
+    return (
+        bool(name)
+        and len(name) <= MAX_HOSTNAME
+        and name.isprintable()
+        and not any(c.isspace() for c in name)
+    )
 
 
 def _has_nul(value: object) -> bool:

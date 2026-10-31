@@ -25,7 +25,7 @@ def make(db: Session, **kw: object) -> tuple[Token, str]:
     args: dict[str, object] = {
         "kind": "global",
         "name": "t",
-        "created_by": "test",
+        "actor": "test",
         "expires_at": None,
     }
     return create_token(db, **(args | kw))  # type: ignore[arg-type]
@@ -82,17 +82,17 @@ def test_wrong_secret_is_refused_without_echoing_it(db: Session) -> None:
 
 def test_revoked_token_is_refused(db: Session) -> None:
     token, plain = make(db)
-    assert revoke_token(db, token.id, NOW) is True
+    assert revoke_token(db, token.id, NOW, "test") is True
     with pytest.raises(TokenError, match="revoked"):
         authenticate(db, f"Bearer {plain}", NOW)
 
 
 def test_revoking_twice_or_unknown(db: Session) -> None:
     token, _ = make(db)
-    assert revoke_token(db, token.id, NOW)
-    assert revoke_token(db, token.id, NOW + timedelta(days=1))
+    assert revoke_token(db, token.id, NOW, "test")
+    assert revoke_token(db, token.id, NOW + timedelta(days=1), "test")
     assert db.get(Token, token.id).revoked_at == NOW  # type: ignore[union-attr]
-    assert revoke_token(db, 99999, NOW) is False
+    assert revoke_token(db, 99999, NOW, "test") is False
 
 
 def test_expired_token_is_refused(db: Session) -> None:
