@@ -23,10 +23,11 @@ from pydebuprep_portal.access import (
 )
 from pydebuprep_portal.audit import actor_of, list_audit
 from pydebuprep_portal.auth import api_viewer
+from pydebuprep_portal.configs import etag, newest, render_served
 from pydebuprep_portal.db import get_session
 from pydebuprep_portal.ingest import IngestError, check_headers, read_body, store_report
 from pydebuprep_portal.mapping import MappingError, map_host, queue, queue_visible, unmap_host
-from pydebuprep_portal.models import Host, Team, Token
+from pydebuprep_portal.models import Config, Host, Team, Token
 from pydebuprep_portal.queries import (
     ReportRow,
     delete_report,
@@ -640,4 +641,51 @@ def audit_log(
     return AuditList(
         entries=[AuditOut.model_validate(e, from_attributes=True) for e in entries],
         next_before=next_before,
+    )
+
+
+CONFIG_NOT_FOUND = "no such config for this token"
+
+
+@router.get(
+    "/configs/{team}/{name}",
+    summary="A host fetches its config (upload token)",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/yaml": {}}, "description": "The config, with an ETag"},
+        304: {"description": "Unchanged since the ETag in If-None-Match"},
+        401: {"description": "No valid upload token"},
+        404: {"description": "No such config, or not one this token may fetch"},
+    },
+)
+def host_config(
+    request: Request,
+    team: str,
+    name: str,
+    session: SessionDep,
+    authorization: Annotated[str | None, Header()] = None,
+    if_none_match: Annotated[str | None, Header()] = None,
+) -> Response:
+    """What `pydebuprep --config https://PORTAL/api/v1/configs/<team>/<name>` reads. A global
+    token fetches any team's configs; a team or host token, its own team's."""
+    now = datetime.now(UTC)
+    try:
+        token = authenticate(session, authorization, now)
+    except TokenError as exc:
+        raise HTTPException(401, str(exc), headers={"WWW-Authenticate": "Bearer"}) from None
+    config = session.scalar(
+        select(Config).join(Config.team).where(Team.name == team, Config.name == name)
+    )
+    if config is None or (token.kind != "global" and token.team_id != config.team_id):
+        raise HTTPException(404, CONFIG_NOT_FOUND)
+    text = render_served(request.app.state.settings, config, newest(config))
+    tag = etag(text)
+    token.last_used_at = now
+    session.commit()
+    if if_none_match == tag:
+        return Response(status_code=304, headers={"ETag": tag})
+    return Response(
+        text,
+        media_type="application/yaml; charset=utf-8",
+        headers={"ETag": tag, "Cache-Control": "no-cache"},
     )

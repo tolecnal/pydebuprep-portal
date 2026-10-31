@@ -6,6 +6,7 @@ import socket
 import threading
 import time
 import urllib.request
+from pathlib import Path
 
 from pydebuprep.portal import Connection, upload_report
 from sqlalchemy.orm import Session
@@ -63,3 +64,41 @@ def test_a_stalled_upload_does_not_block_its_token(live_portal: LivePortal, toke
         assert "/reports/" in url
     finally:
         stalled.close()
+
+
+def test_pydebuprep_fetches_and_accepts_the_config(
+    live_portal: LivePortal, fetch_tokens: dict[str, str]
+) -> None:
+    from pydebuprep.portal import fetch_config
+    from pydebuprep.remote_config import parse_remote
+
+    url = f"{live_portal.base_url}/api/v1/configs/web/default"
+    fetched = fetch_config(url, fetch_tokens["web-team"], Connection(allow_http=True))
+    assert fetched.text is not None
+    config = parse_remote(fetched.text, url)
+    assert config.report.todo is True
+    assert config.upload.url == live_portal.base_url
+    again = fetch_config(url, fetch_tokens["web-team"], Connection(allow_http=True), fetched.etag)
+    assert again.text is None and again.etag == fetched.etag
+
+
+def test_pydebuprep_load_remote_config_saves_a_copy(
+    live_portal: LivePortal, fetch_tokens: dict[str, str], tmp_path: Path
+) -> None:
+    from datetime import UTC, datetime
+
+    from pydebuprep.remote_config import load_remote_config
+
+    token_file = tmp_path / "token"
+    token_file.write_text(fetch_tokens["global"] + "\n")
+    token_file.chmod(0o600)
+    cache = tmp_path / "configs"
+    cache.mkdir(mode=0o700)
+    warnings: list[str] = []
+    url = f"{live_portal.base_url}/api/v1/configs/web/default"
+    config, info = load_remote_config(url, token_file=str(token_file), conn=Connection(allow_http=True),
+                                      cache_dir=str(cache), now=datetime.now(UTC), warn=warnings.append, env={})  # fmt: skip
+    assert config.report.todo is True
+    assert (info.source, info.stale) == (url, False)
+    assert len(list(cache.iterdir())) == 1
+    assert warnings == []
