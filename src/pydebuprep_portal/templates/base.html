@@ -21,6 +21,7 @@
   <div class="who">
     <span class="name">{{ viewer.name }}</span>
     {% for role in viewer.roles | sort %}<span class="role">{{ role }}</span>{% endfor %}
+    {% for team in viewer.teams | sort %}<span class="team">{{ team }}{% if team in viewer.leads %} (lead){% endif %}</span>{% endfor %}
     <form method="post" action="/logout" class="inline">
       <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
       <button type="submit">Sign out</button>

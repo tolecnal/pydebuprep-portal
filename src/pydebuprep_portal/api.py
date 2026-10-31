@@ -91,11 +91,19 @@ class WhoAmI(BaseModel):
     subject: str
     name: str
     roles: list[str]
+    teams: list[str]
+    leads: list[str]
 
 
 @router.get("/whoami", summary="Who the access token belongs to")
 def whoami(viewer: Annotated[Viewer, Depends(api_viewer)]) -> WhoAmI:
-    return WhoAmI(subject=viewer.subject, name=viewer.name, roles=sorted(viewer.roles))
+    return WhoAmI(
+        subject=viewer.subject,
+        name=viewer.name,
+        roles=sorted(viewer.roles),
+        teams=sorted(viewer.teams),
+        leads=sorted(viewer.leads),
+    )
 
 
 PAGE_SIZE = 50
