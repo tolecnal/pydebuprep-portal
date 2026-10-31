@@ -164,7 +164,8 @@ def test_release_workflow_publishes_to_ghcr() -> None:
     assert job["permissions"] == {"contents": "write", "packages": "write", "id-token": "write",
                                   "attestations": "write"}  # fmt: skip
     assert "scripts/smoke.sh" in text  # the image is tested before it is published
-    assert "ghcr.io" in text and "push-to-registry: true" in text
+    assert job["env"]["IMAGE"] == "ghcr.io/tolecnal/pydebuprep-portal"
+    assert "push-to-registry: true" in text
     assert "doesn't match the package version" in text
     assert "${{" not in "".join(s.get("run", "") for s in job["steps"])  # no template injection
 
