@@ -73,7 +73,8 @@ def create_token(
 
 
 def authenticate(session: Session, authorization: str | None, now: datetime) -> Token:
-    """The token in an `Authorization: Bearer` header, or TokenError."""
+    """The token in an `Authorization: Bearer` header, or TokenError. Only reads: it
+    takes no lock, so a slow upload can't hold up others sent with the same token."""
     match = BEARER.fullmatch(authorization or "")
     if match is None:
         raise TokenError("expected an upload token: Authorization: Bearer pdp_…")
@@ -86,8 +87,6 @@ def authenticate(session: Session, authorization: str | None, now: datetime) -> 
         raise TokenError("this upload token has been revoked")
     if token.expires_at is not None and token.expires_at <= now:
         raise TokenError("this upload token has expired")
-    token.last_used_at = now
-    session.flush()
     return token
 
 

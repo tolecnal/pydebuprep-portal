@@ -191,3 +191,18 @@ def test_api_filter_by_host(admin: TestClient, add_report: AddReport, bearer: Be
         "/api/v1/reports", params={"host": "WEB1"}, headers=bearer("pydebuprep-admins")
     ).json()
     assert [r["id"] for r in data["reports"]] == [web.id]
+
+
+def test_htmx_history_restore_gets_the_full_page(admin: TestClient, add_report: AddReport) -> None:
+    add_report()
+    resp = admin.get("/", headers={"HX-Request": "true", "HX-History-Restore-Request": "true"})
+    assert "<html" in resp.text
+    assert "HX-Request" in resp.headers["Vary"]
+    assert "HX-Request" in admin.get("/").headers["Vary"]
+
+
+def test_htmx_keeps_no_page_snapshots() -> None:
+    from pathlib import Path
+
+    base = Path(__file__).resolve().parent.parent / "src/pydebuprep_portal/templates/base.html"
+    assert '"historyCacheSize": 0' in base.read_text()

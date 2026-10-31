@@ -36,7 +36,7 @@ def test_created_token_authenticates(db: Session) -> None:
     assert plain.startswith(f"pdp_{token.public_id}_")
     found = authenticate(db, f"Bearer {plain}", NOW)
     assert found.id == token.id
-    assert found.last_used_at == NOW
+    assert found.last_used_at is None  # recorded when a report is stored, not here
 
 
 def test_only_the_hash_is_stored(db: Session) -> None:

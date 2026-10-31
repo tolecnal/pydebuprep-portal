@@ -41,7 +41,7 @@ def test_same_report_stored_meanwhile(
         return original(*args, **kw)
 
     monkeypatch.setattr(ingest, "_insert", racing)
-    _, created = store_report(db, body, token, NOW)
+    _, created = store_report(db, body, token.id, NOW)
     assert created is False
     assert db.query(Report).count() == 1
 
@@ -52,5 +52,5 @@ def test_gives_up_after_two_clashes(db: Session, monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(ingest, "_insert", clash)
     with pytest.raises(IngestError) as exc:
-        store_report(db, sample_json().encode(), a_token(db), NOW)
+        store_report(db, sample_json().encode(), a_token(db).id, NOW)
     assert exc.value.status == 503

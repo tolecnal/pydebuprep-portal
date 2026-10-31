@@ -196,7 +196,7 @@ def add_report(db: Session) -> Callable[..., Report]:
     def add(**kw: Any) -> Report:
         nonlocal received
         received += timedelta(minutes=1)
-        return store_report(db, sample_json(**kw).encode(), stored_token, received)[0]
+        return store_report(db, sample_json(**kw).encode(), stored_token.id, received)[0]
 
     return add
 

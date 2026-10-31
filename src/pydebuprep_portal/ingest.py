@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pydebuprep.model import Report as ReportData
 from pydebuprep.model import Severity, all_findings, compute_summary
 from pydebuprep.reportfile import ReportFileError, load_report
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.requests import Request
@@ -85,7 +85,19 @@ def parse(body: bytes) -> ReportData:
         or (any(c.isspace() for c in hostname))
     ):
         raise IngestError(422, f"host.hostname is not a host name: {hostname!r}")
+    if _has_nul(report.to_dict()):
+        raise IngestError(422, "the report contains a NUL character, which can't be stored")
     return report
+
+
+def _has_nul(value: object) -> bool:
+    if isinstance(value, str):
+        return "\x00" in value
+    if isinstance(value, dict):
+        return any(_has_nul(k) or _has_nul(v) for k, v in value.items())
+    if isinstance(value, list):
+        return any(_has_nul(v) for v in value)
+    return False
 
 
 def _when(value: str) -> datetime:
@@ -101,15 +113,19 @@ def _worst(critical: int, warning: int, info: int) -> str:
     return Severity.INFO.value if info else "ok"
 
 
-def store_report(session: Session, body: bytes, token: Token, now: datetime) -> tuple[Report, bool]:
-    """Store an upload; (report, True) if new, (the stored one, False) if sent before."""
+def store_report(
+    session: Session, body: bytes, token_id: int, now: datetime
+) -> tuple[Report, bool]:
+    """Store an upload sent with TOKEN_ID; (report, True) if new, (the stored one, False)
+    if sent before. Either way the token's last use is recorded."""
     data = parse(body)
     sha256 = hashlib.sha256(body).hexdigest()
-    token_id = token.id
     # Two tries: a concurrent upload may create the same report or the same host first.
     for _ in range(2):
         existing = session.scalar(select(Report).where(Report.sha256 == sha256))
         if existing is not None:
+            _used(session, token_id, now)
+            session.commit()
             return existing, False
         try:
             report = _insert(
@@ -157,5 +173,10 @@ def _insert(
                 Finding(check_id=result.id, severity=finding.severity.value, title=finding.title)
             )
     session.add(report)
+    _used(session, token_id, now)
     session.commit()
     return report
+
+
+def _used(session: Session, token_id: int, now: datetime) -> None:
+    session.execute(update(Token).where(Token.id == token_id).values(last_used_at=now))

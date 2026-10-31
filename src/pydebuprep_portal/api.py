@@ -72,10 +72,13 @@ async def upload(
         token = await run_in_threadpool(authenticate, session, authorization, now)
     except TokenError as exc:
         raise HTTPException(401, str(exc), headers={"WWW-Authenticate": "Bearer"}) from None
+    token_id = token.id
+    # Hand the connection back while the body arrives, however slowly it comes.
+    await run_in_threadpool(session.rollback)
     try:
         check_headers(request, settings.max_upload_bytes)
         body = await read_body(request, settings.max_upload_bytes)
-        report, created = await run_in_threadpool(store_report, session, body, token, now)
+        report, created = await run_in_threadpool(store_report, session, body, token_id, now)
     except IngestError as exc:
         raise HTTPException(exc.status, exc.detail) from None
     response.status_code = 201 if created else 200

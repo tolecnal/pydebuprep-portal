@@ -54,8 +54,14 @@ def home(
 ) -> HTMLResponse:
     rows = list_reports(session, viewer, worst=worst, before=before, limit=PAGE_SIZE + 1)
     rows, next_before = page_of(rows, PAGE_SIZE)
-    template = "_report_rows.html" if request.headers.get("HX-Request") else "reports.html"
-    return page(request, template, viewer, rows=rows, next_before=next_before, worst=worst)
+    # Only the rows for htmx's filter requests; the whole page when htmx restores history.
+    partial = request.headers.get("HX-Request") and not request.headers.get(
+        "HX-History-Restore-Request"
+    )
+    template = "_report_rows.html" if partial else "reports.html"
+    response = page(request, template, viewer, rows=rows, next_before=next_before, worst=worst)
+    response.headers["Vary"] = "HX-Request, HX-History-Restore-Request"
+    return response
 
 
 @router.get("/reports/{report_id}", response_class=HTMLResponse)

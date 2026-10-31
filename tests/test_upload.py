@@ -197,3 +197,25 @@ def test_findings_include_baseline_changes(api: TestClient, token: str, db: Sess
     report = db.get(Report, resp.json()["id"])
     assert report is not None and report.worst == "warning"
     assert [f.title for f in db.query(Finding)] == ["Unit was running before"]
+
+
+@pytest.mark.parametrize("where", ["title", "kernel"])
+def test_nul_characters_are_422(api: TestClient, token: str, db: Session, where: str) -> None:
+    data = json.loads(sample_json())
+    if where == "title":
+        data["results"][0]["findings"][0]["title"] = "bad\x00title"
+    else:
+        data["host"]["kernel"] = "6.12\x00"
+    resp = post(api, token, json.dumps(data).encode())
+    assert resp.status_code == 422
+    assert "NUL" in resp.json()["detail"]
+    assert db.query(Report).count() == 0
+
+
+def test_a_repeated_upload_records_the_token_use(api: TestClient, token: str, db: Session) -> None:
+    body = sample_json().encode()
+    post(api, token, body)
+    first = db.query(Report).one().token.last_used_at
+    db.expire_all()
+    post(api, token, body)
+    assert db.query(Report).one().token.last_used_at > first  # type: ignore[operator]
