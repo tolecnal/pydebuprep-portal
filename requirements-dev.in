@@ -1,0 +1,9 @@
+# Development and CI tools, on top of requirements.in:
+#   make lock
+-r requirements.in
+pytest
+pytest-cov
+ruff
+mypy
+bandit
+types-PyYAML

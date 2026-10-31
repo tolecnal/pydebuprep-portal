@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pydebuprep-portal"
+dynamic = ["version"]
+description = "A portal that keeps pydebuprep reports in one place"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [{ name = "Jostein Elvaker Haande", email = "jehaande@gmail.com" }]
+# Pinned with hashes in requirements.txt; listed here without versions.
+dependencies = [
+    "pydebuprep",
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy>=2",
+    "psycopg[binary]>=3",
+    "alembic",
+    "authlib",
+    "httpx",
+    "itsdangerous",
+    "jinja2",
+    "python-multipart",
+    "swagger-ui-bundle",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "pydebuprep_portal.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pydebuprep_portal = ["templates/*.html", "static/*", "migrations/*.py", "migrations/*.mako", "migrations/versions/*.py"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "PL"]
+ignore = ["PLR0913", "PLR2004", "PLR0911", "PLR0912", "PLC0415"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+
+[tool.coverage.run]
+branch = true
+source = ["pydebuprep_portal"]
+
+[tool.coverage.report]
+# Every line and branch must be covered; mark genuinely untestable code with
+# "# pragma: no cover" and a reason rather than lowering this.
+fail_under = 100
+show_missing = true
+skip_covered = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
