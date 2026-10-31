@@ -85,3 +85,15 @@ def test_retention_settings_audit_log() -> None:
     assert allowed(access.may_set_retention) == {"admin"}
     assert allowed(access.may_change_settings) == {"admin"}
     assert allowed(access.may_read_audit) == {"admin", "auditor"}
+
+
+def test_configs() -> None:
+    assert allowed(lambda v: access.may_read_configs(v, T)) == {
+        "admin",
+        "auditor",
+        "lead",
+        "member",
+    }
+    assert allowed(lambda v: access.may_edit_configs(v, T)) == {"admin", "lead", "member"}
+    assert allowed(lambda v: access.may_read_configs(v, "db")) == {"admin", "auditor", "other-lead"}
+    assert allowed(lambda v: access.may_edit_configs(v, "db")) == {"admin", "other-lead"}

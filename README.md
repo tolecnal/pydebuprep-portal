@@ -7,9 +7,9 @@ host's timeline and search findings.
 
 pydebuprep works without the portal. A host uses it only when its config says so.
 
-> **Status: step 3 of the build order.** Uploads, sign-in, reports, hosts, search,
-> teams and roles, global, team and host tokens, the unassigned queue, retention and the
-> audit log work. Serving configs to hosts (`pydebuprep --config https://…`) comes next.
+> **Status: the build order is complete.** Uploads, sign-in, reports, hosts, search,
+> teams and roles, global, team and host tokens, the unassigned queue, retention, the
+> audit log, and configs that hosts fetch with `pydebuprep --config https://…`.
 
 ## Running it
 
@@ -127,6 +127,37 @@ upload:
 Each `pydebuprep report` now uploads its report. A report that couldn't be sent is
 kept on the host and sent later with `sudo pydebuprep upload`; sending one twice is
 harmless. See [Using a portal](https://pydebuprep.app/guide/portal/) for the details.
+
+## Configs
+
+A team's members and leads (and admins) build pydebuprep configs on the **Configs**
+page. The form is built from pydebuprep's own checks and options, so it offers only what
+the CLI knows, and every save is checked by pydebuprep's own rules for a config fetched
+from a URL. Every save is a new **version**; hosts get the newest, and earlier versions
+stay viewable. Auditors read every team's configs.
+
+A host runs with a config through its URL and the token it uploads with:
+
+```sh
+sudo pydebuprep --config https://portal.example.com/api/v1/configs/web/default
+```
+
+A global token fetches any team's configs; a team or host token, its own team's. The
+portal fills in its own upload URL, and an unchanged config isn't downloaded again
+(ETag). pydebuprep keeps a copy, and runs with it when the portal can't be reached,
+saying so in the report.
+
+A served config only steers pydebuprep's read-only checks: it never names a file to
+write or read, a directory to walk or a URL to probe (`report.output_dir`,
+`report.snapshot_dir`, the `upload` section, `credentials_file`, `search_paths`,
+`http_probes`), and its baseline is `auto` or `none`.
+
+Before anyone has signed in, create a config with pydebuprep's defaults on the command
+line; it prints the URL:
+
+```sh
+docker compose exec portal python -m pydebuprep_portal.manage create-config web default
+```
 
 ## Retention
 

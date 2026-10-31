@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from pydebuprep_portal.db import Base, migrations_config
-from pydebuprep_portal.models import Finding, Host, Report, Team, Token
+from pydebuprep_portal.models import Config, ConfigVersion, Finding, Host, Report, Team, Token
 
 NOW = datetime(2026, 10, 31, 9, 0, tzinfo=UTC)
 
@@ -27,6 +27,8 @@ def test_upgrade_from_empty_creates_the_tables(engine: Engine) -> None:
         "teams",
         "settings",
         "audit_log",
+        "configs",
+        "config_versions",
         "alembic_version",
     }
 
@@ -133,3 +135,37 @@ def test_token_kind_constraints(db: Session) -> None:
         with pytest.raises(IntegrityError):
             db.commit()
         db.rollback()
+
+
+def _config(db: Session, team: Team, name: str = "default") -> Config:
+    config = Config(team_id=team.id, name=name, created_at=NOW, created_by="test")
+    db.add(config)
+    db.commit()
+    return config
+
+
+def test_config_version_numbers_are_unique(db: Session) -> None:
+    team = Team(name="web", public=False, keep_forever=False, created_at=NOW, created_by="test")
+    db.add(team)
+    db.commit()
+    config = _config(db, team)
+    for _ in range(2):
+        db.add(ConfigVersion(config_id=config.id, version=1, values={}, created_at=NOW,
+                             created_by="test"))  # fmt: skip
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
+    db.add(ConfigVersion(config_id=config.id, version=0, values={}, created_at=NOW, created_by="t"))
+    with pytest.raises(IntegrityError):
+        db.commit()
+
+
+def test_config_names_are_unique_per_team(db: Session) -> None:
+    web = Team(name="web", public=False, keep_forever=False, created_at=NOW, created_by="test")
+    other = Team(name="db", public=False, keep_forever=False, created_at=NOW, created_by="test")
+    db.add_all([web, other])
+    db.commit()
+    _config(db, web)
+    _config(db, other)  # the same name in another team is fine
+    with pytest.raises(IntegrityError):
+        _config(db, web)

@@ -123,3 +123,12 @@ def may_change_settings(viewer: Viewer) -> bool:
 
 def may_read_audit(viewer: Viewer) -> bool:
     return viewer.reads_all
+
+
+def may_read_configs(viewer: Viewer, team: str) -> bool:
+    return viewer.reads_all or team in viewer.teams
+
+
+def may_edit_configs(viewer: Viewer, team: str) -> bool:
+    """Admins, and the team's members and leads (the spec gives members their team's)."""
+    return viewer.is_admin or team in viewer.teams

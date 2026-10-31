@@ -39,3 +39,10 @@ iframe.report { width: 100%; height: 75vh; border: 1px solid var(--line); backgr
 code.secret { font-size: 1.05em; user-select: all; word-break: break-all; }
 .team { font-size: .8em; padding: 0 .4em; border: 1px dashed var(--line); border-radius: 4px; }
 form.settings { display: grid; gap: .6rem; max-width: 40rem; } fieldset { border: 1px solid var(--line); }
+form.generator fieldset { border: 0; padding: 0; display: grid; gap: .4rem; }
+label.field { display: grid; grid-template-columns: minmax(10rem, 18rem) 1fr; gap: .2rem 1rem; align-items: start; }
+label.field small { grid-column: 2; color: var(--muted); }
+details.check { border: 1px solid var(--line); border-radius: 4px; padding: .3rem .6rem; }
+details.check summary { cursor: pointer; }
+pre.yaml, pre.command { background: color-mix(in srgb, var(--fg) 6%, transparent); padding: .6rem; overflow-x: auto; }
+@media (max-width: 40rem) { label.field { grid-template-columns: 1fr; } label.field small { grid-column: 1; } }

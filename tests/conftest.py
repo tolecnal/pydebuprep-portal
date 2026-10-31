@@ -57,7 +57,7 @@ def client() -> Iterator[TestClient]:
 
 # --- database ---------------------------------------------------------------------
 
-TABLES = ("hosts", "tokens", "reports", "findings", "teams", "audit_log")
+TABLES = ("hosts", "tokens", "reports", "findings", "teams", "audit_log", "configs")
 
 
 @pytest.fixture(scope="session")
@@ -261,3 +261,37 @@ def assign(db: Session, report: Report, team: Team | None) -> Report:
     report.team_id = report.host.team_id = None if team is None else team.id
     db.commit()
     return report
+
+
+# --- configs ------------------------------------------------------------------------
+
+
+@pytest.fixture
+def fetch_tokens(db: Session) -> dict[str, str]:
+    """Plain upload tokens: global, web's team token, web1's host token, db's team token,
+    a revoked and an expired one; with a config web/default (one change saved)."""
+    from pydebuprep_portal.access import Viewer
+    from pydebuprep_portal.configs import create_config, save_config
+    from pydebuprep_portal.models import Token
+    from pydebuprep_portal.tokens import revoke_token
+
+    web, other = make_team(db, "web"), make_team(db, "db")
+    member = Viewer("m", "Mia", frozenset(), teams=frozenset({"web"}))
+    create_config(db, member, test_settings(), "web", "default")
+    save_config(db, member, test_settings(), "web", "default", {"report": {"todo": True}})
+
+    def make(kind: str, team_id: int | None = None, host: str | None = None, **kw: Any) -> str:
+        return create_token(db, kind=kind, name=f"{kind}-{team_id}-{host}", actor="test",
+                            team_id=team_id, host_name=host, **({"expires_at": None} | kw))[1]  # fmt: skip
+
+    tokens = {
+        "global": make("global"),
+        "web-team": make("team", web.id),
+        "web1-host": make("host", web.id, "web1"),
+        "db-team": make("team", other.id),
+        "expired": make("team", web.id, expires_at=datetime.now(UTC) - timedelta(days=1)),
+    }
+    tokens["revoked"] = make("team", web.id)
+    revoked = db.query(Token).filter_by(public_id=tokens["revoked"].split("_")[1]).one()
+    revoke_token(db, revoked.id, datetime.now(UTC), "test")
+    return tokens

@@ -15,6 +15,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -170,3 +171,40 @@ class AuditEntry(Base):
     action: Mapped[str] = mapped_column(Text)
     target: Mapped[str] = mapped_column(Text)
     details: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+
+
+class Config(Base):
+    """A team's named pydebuprep config; hosts fetch its newest version."""
+
+    __tablename__ = "configs"
+    __table_args__ = (UniqueConstraint("team_id", "name", name="uq_configs_team_id_name"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
+    name: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str] = mapped_column(Text)
+
+    team: Mapped[Team] = relationship()
+    versions: Mapped[list[ConfigVersion]] = relationship(
+        back_populates="config", order_by="ConfigVersion.version", passive_deletes=True
+    )
+
+
+class ConfigVersion(Base):
+    """One save of a config: the values that differ from pydebuprep's defaults."""
+
+    __tablename__ = "config_versions"
+    __table_args__ = (
+        UniqueConstraint("config_id", "version", name="uq_config_versions_config_id_version"),
+        CheckConstraint("version >= 1", name="version"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    config_id: Mapped[int] = mapped_column(ForeignKey("configs.id", ondelete="CASCADE"))
+    version: Mapped[int] = mapped_column(Integer)
+    values: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str] = mapped_column(Text)
+
+    config: Mapped[Config] = relationship(back_populates="versions")

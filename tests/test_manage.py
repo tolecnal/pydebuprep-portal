@@ -72,3 +72,40 @@ def test_manage_reports_bad_settings(
     monkeypatch.delenv("PORTAL_DATABASE_URL")
     assert main(["migrate"]) == 1
     assert "PORTAL_DATABASE_URL" in capsys.readouterr().err
+
+
+def test_manage_create_config(
+    db: Session, db_env: dict[str, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from pydebuprep_portal.models import AuditEntry, Config
+
+    assert main(["create-config", "web", "default"]) == 0
+    assert capsys.readouterr().out == "https://portal.test/api/v1/configs/web/default\n"
+    config = db.query(Config).one()
+    assert (config.team.name, config.name, [v.values for v in config.versions]) == (
+        "web",
+        "default",
+        [{}],
+    )
+    actions = [(e.actor, e.action) for e in db.query(AuditEntry).order_by(AuditEntry.id)]
+    assert actions == [("manage", "team.create"), ("manage", "config.create")]
+
+
+@pytest.mark.parametrize("argv", [["create-config", "web"], ["create-config", "Bad Team", "x"],
+                                  ["create-config", "web", "Bad Name"]])  # fmt: skip
+def test_manage_create_config_errors(db_env: dict[str, str], argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(argv)
+    assert exc.value.code == 2
+
+
+def test_manage_create_config_for_an_existing_team(
+    db: Session, db_env: dict[str, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from conftest import make_team
+    from pydebuprep_portal.models import AuditEntry
+
+    make_team(db, "web")
+    assert main(["create-config", "web", "default"]) == 0
+    capsys.readouterr()
+    assert [e.action for e in db.query(AuditEntry)] == ["config.create"]

@@ -43,6 +43,16 @@ for attempt in first again; do
   case $out in *"uploaded to $base/reports/"*) ;; *) echo "smoke: upload failed" >&2; exit 1 ;; esac
 done
 
+url=$(docker compose -p "$project" exec -T portal \
+  python -m pydebuprep_portal.manage create-config smoke default)
+mkdir -m 0700 "$work/configs"  # as the package creates under /var/lib/pydebuprep
+out=$(PYDEBUPREP_TOKEN=$token PYDEBUPREP_STATE_DIR="$work" \
+      "$PYDEBUPREP" configtest --allow-http --config "$url" 2>&1)
+echo "configtest: $out"
+case $out in *warning*) echo "smoke: config fetch warned" >&2; exit 1 ;; esac
+case $out in *"fetched now"*) ;; *) echo "smoke: config fetch failed" >&2; exit 1 ;; esac
+ls "$work/configs"/*.json >/dev/null || { echo "smoke: no saved copy of the config" >&2; exit 1; }
+
 for path in /healthz /docs /static/swagger/swagger-ui-bundle.js; do
   python3 -c "import sys, urllib.request; urllib.request.urlopen(sys.argv[1], timeout=5)" "$base$path"
 done
