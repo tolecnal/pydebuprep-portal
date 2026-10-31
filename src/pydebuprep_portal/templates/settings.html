@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Settings — pydebuprep portal{% endblock %}
+{% block main %}
+<h1>Settings</h1>
+{% if error %}<p class="notice">{{ error }}</p>{% endif %}
+{% if viewer.is_admin %}
+<form class="settings" method="post" action="/settings">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <fieldset><legend>Keep reports</legend>
+    <label>for <input name="retention_days" inputmode="numeric" size="6" value="{{ settings.retention_days or '' }}"> days</label>
+    <label><input type="checkbox" name="keep_forever" value="1"{% if settings.retention_days is none %} checked{% endif %}> forever</label>
+    <p class="empty">Teams and hosts can have their own retention; a host's newest report is always kept.</p>
+  </fieldset>
+  <label><input type="checkbox" name="only_admins_map" value="1"{% if settings.only_admins_map %} checked{% endif %}> Only admins map hosts to teams</label>
+  <label>Largest upload <input name="max_upload_mib" inputmode="numeric" size="5" value="{{ settings.max_upload_bytes // 1048576 }}"> MiB</label>
+  <button type="submit">Save</button>
+</form>
+{% else %}
+<dl class="facts">
+  <dt>Keep reports</dt><dd>{% if settings.retention_days is none %}forever{% else %}{{ settings.retention_days }} days{% endif %}</dd>
+  <dt>Who maps hosts</dt><dd>{% if settings.only_admins_map %}admins only{% else %}admins, and team leads into their teams{% endif %}</dd>
+  <dt>Largest upload</dt><dd>{{ settings.max_upload_bytes // 1048576 }} MiB</dd>
+</dl>
+{% endif %}
+{% endblock %}

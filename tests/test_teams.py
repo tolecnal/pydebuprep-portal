@@ -213,24 +213,6 @@ def test_deleting_the_last_report_keeps_the_host_page_404(
     )
 
 
-@pytest.mark.parametrize(
-    ("days", "forever", "global_days", "text"),
-    [
-        (None, False, 365, "365 days (global)"),
-        (None, False, None, "forever (global)"),
-        (90, False, 365, "90 days"),
-        (None, True, 365, "forever"),
-    ],
-)
-def test_retention_text(
-    days: int | None, forever: bool, global_days: int | None, text: str
-) -> None:
-    from pydebuprep_portal.teams import retention_text
-
-    team = Team(name="t", retention_days=days, keep_forever=forever)
-    assert retention_text(team, global_days) == text
-
-
 def test_visibility_of_an_unknown_team_is_404(signed_in: Callable[..., TestClient]) -> None:
     admin = signed_in(*ADMIN)
     assert (

@@ -8,14 +8,17 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from pydebuprep.render import FORMATS
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from pydebuprep_portal.access import (
     Viewer,
+    may_change_settings,
     may_manage_tokens,
     may_read_tokens,
     may_see_queue_hosts,
+    may_set_retention,
     may_set_visibility,
 )
 from pydebuprep_portal.audit import actor_of
@@ -23,7 +26,7 @@ from pydebuprep_portal.auth import api_viewer
 from pydebuprep_portal.db import get_session
 from pydebuprep_portal.ingest import IngestError, check_headers, read_body, store_report
 from pydebuprep_portal.mapping import MappingError, map_host, queue, unmap_host
-from pydebuprep_portal.models import Team, Token
+from pydebuprep_portal.models import Host, Team, Token
 from pydebuprep_portal.queries import (
     ReportRow,
     delete_report,
@@ -37,8 +40,14 @@ from pydebuprep_portal.queries import (
 )
 from pydebuprep_portal.rendering import MEDIA_TYPES, render_stored
 from pydebuprep_portal.settings import Settings
-from pydebuprep_portal.settings_store import get_settings
-from pydebuprep_portal.teams import create_team, list_teams, set_visibility, visible_team
+from pydebuprep_portal.settings_store import get_settings, update_settings
+from pydebuprep_portal.teams import (
+    create_team,
+    list_teams,
+    set_retention,
+    set_visibility,
+    visible_team,
+)
 from pydebuprep_portal.tokens import (
     MAX_EXPIRES_DAYS,
     MAX_NAME,
@@ -542,3 +551,63 @@ def remove_report(report_id: int, viewer: ViewerDep, session: SessionDep) -> Res
     if not deleted:
         raise HTTPException(404, "no such report")
     return Response(status_code=204)
+
+
+class SettingsBody(BaseModel):
+    retention_days: int | None = Field(description="None: keep reports forever")
+    only_admins_map: bool
+    max_upload_bytes: int
+
+
+class RetentionBody(BaseModel):
+    days: int | None = Field(description="With forever false: None inherits")
+    forever: bool = False
+
+
+@router.get("/settings", summary="Global settings (admins and auditors)")
+def global_settings(viewer: ViewerDep, session: SessionDep) -> SettingsBody:
+    if not viewer.reads_all:
+        raise FORBIDDEN
+    return SettingsBody(**get_settings(session).__dict__)
+
+
+@router.put("/settings", summary="Change the global settings (admins)")
+def put_settings(request: SettingsBody, viewer: ViewerDep, session: SessionDep) -> SettingsBody:
+    if not may_change_settings(viewer):
+        raise FORBIDDEN
+    try:
+        new = update_settings(session, actor_of(viewer), **request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return SettingsBody(**new.__dict__)
+
+
+def _set_retention(session: Session, viewer: Viewer, request: RetentionBody, **target: Any) -> None:
+    if not may_set_retention(viewer):
+        raise FORBIDDEN
+    try:
+        set_retention(session, actor_of(viewer), days=request.days, forever=request.forever,
+                      **target)  # fmt: skip
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+
+@router.put("/teams/{name}/retention", summary="A team's retention (admins)",
+            responses=TEAM_NOT_FOUND)  # fmt: skip
+def put_team_retention(
+    name: str, request: RetentionBody, viewer: ViewerDep, session: SessionDep
+) -> RetentionBody:
+    _set_retention(session, viewer, request, team=_team(session, viewer, name))
+    return request
+
+
+@router.put("/hosts/{name}/retention", summary="A host's retention (admins)",
+            responses={404: {"description": "No such host"}})  # fmt: skip
+def put_host_retention(
+    name: str, request: RetentionBody, viewer: ViewerDep, session: SessionDep
+) -> RetentionBody:
+    host = session.scalar(select(Host).where(Host.name == name.lower()))
+    if host is None:
+        raise HTTPException(404, "no such host")
+    _set_retention(session, viewer, request, host=host)
+    return request

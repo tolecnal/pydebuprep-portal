@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from alembic import command
 
 from pydebuprep_portal.db import make_engine, make_sessionmaker, migrations_config
+from pydebuprep_portal.retention import expire_reports
 from pydebuprep_portal.settings import SettingsError, load_settings
 from pydebuprep_portal.tokens import create_token, token_request
 
@@ -18,6 +19,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m pydebuprep_portal.manage")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("migrate", help="bring the database schema up to date")
+    sub.add_parser("expire", help="delete expired reports now (the portal does it daily)")
     token = sub.add_parser("create-token", help="create a global upload token and print it")
     token.add_argument("name", help="what the token is for")
     token.add_argument("--expires-days", type=int, help="days until it expires (default: never)")
@@ -43,6 +45,12 @@ def main(argv: list[str] | None = None) -> int:
         print("Database schema is up to date.")
         return 0
     engine = make_engine(settings.database_url)
+    if args.command == "expire":
+        with make_sessionmaker(engine)() as session:
+            deleted = expire_reports(session, datetime.now(UTC))
+        engine.dispose()
+        print(f"Expired {deleted} reports.")
+        return 0
     with make_sessionmaker(engine)() as session:
         _, plain = create_token(
             session, kind="global", name=name, actor="manage", expires_at=expires

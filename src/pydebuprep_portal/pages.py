@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -14,10 +14,12 @@ from sqlalchemy.orm import Session
 
 from pydebuprep_portal.access import (
     Viewer,
+    may_change_settings,
     may_delete_reports,
     may_manage_tokens,
     may_read_tokens,
     may_see_queue_hosts,
+    may_set_retention,
     may_set_visibility,
 )
 from pydebuprep_portal.audit import actor_of
@@ -41,12 +43,14 @@ from pydebuprep_portal.rendering import (
     download_name,
     render_stored,
 )
+from pydebuprep_portal.retention import describe, effective_retention
 from pydebuprep_portal.security import DOCS_CSP, require_csrf
-from pydebuprep_portal.settings_store import get_settings
+from pydebuprep_portal.settings_store import get_settings, update_settings
 from pydebuprep_portal.teams import (
     create_team,
     list_teams,
     retention_text,
+    set_retention,
     set_visibility,
     team_hosts,
     visible_team,
@@ -168,10 +172,14 @@ def host_page(request: Request, name: str, viewer: ViewerDep, session: SessionDe
     if rows is None:
         return error_page(request, 404, "Not found", "There is no such host, or you can't see it.")
     host = session.scalar(select(Host).where(Host.name == name.lower()))
+    if host is None:  # pragma: no cover - it has reports
+        return _not_found(request)
     choices = team_choices(session, viewer) if viewer.is_admin else []
+    retention = describe(effective_retention(host, host.team, get_settings(session)))
     return page(
         request, "host.html", viewer, host=name.lower(), rows=rows,
-        team=host.team.name if host and host.team else None, team_choices=choices,
+        team=host.team.name if host.team else None, team_choices=choices, retention=retention,
+        host_row=host,
     )  # fmt: skip
 
 
@@ -333,7 +341,7 @@ def _team_page(
         request, "team.html", viewer, status_code, team=team, tokens=tokens,
         may_manage=may_manage_tokens(viewer, "team", team.name),
         may_visibility=may_set_visibility(viewer, team.name), hosts=team_hosts(session, team),
-        retention=retention_text(team, get_settings(session).retention_days), **context,
+        retention=retention_text(team, get_settings(session)), **context,
     )  # fmt: skip
 
 
@@ -430,6 +438,92 @@ def revoke_team_token_page(
     if not revoke_token(session, token_id, datetime.now(UTC), actor_of(viewer), team.id):
         return error_page(request, 404, "Not found", "There is no such token in this team.")
     return RedirectResponse(f"/teams/{team.name}", status_code=303)
+
+
+def _retention_form(mode: str, days: str) -> tuple[int | None, bool]:
+    """(days, forever) from a retention form: inherit, N days, or keep forever."""
+    if mode == "forever":
+        return None, True
+    if mode == "days":
+        try:
+            return int(days), False
+        except ValueError:
+            raise ValueError("retention is a number of days") from None
+    return None, False
+
+
+@router.post("/teams/{name}/retention", dependencies=[Depends(require_csrf)])
+def team_retention_page(
+    request: Request, name: str, viewer: ViewerDep, session: SessionDep,
+    mode: Annotated[str, Form()] = "inherit", days: Annotated[str, Form()] = "",
+) -> Response:  # fmt: skip
+    if not may_set_retention(viewer):
+        return _forbidden(request)
+    team = visible_team(session, viewer, name)
+    if team is None:
+        return _team_not_found(request)
+    try:
+        set_retention(session, actor_of(viewer), team=team, **_named(_retention_form(mode, days)))
+    except ValueError as exc:
+        return _team_page(request, viewer, session, team, 422, error=str(exc))
+    return RedirectResponse(f"/teams/{team.name}", status_code=303)
+
+
+@router.post("/hosts/{name}/retention", dependencies=[Depends(require_csrf)])
+def host_retention_page(
+    request: Request, name: str, viewer: ViewerDep, session: SessionDep,
+    mode: Annotated[str, Form()] = "inherit", days: Annotated[str, Form()] = "",
+) -> Response:  # fmt: skip
+    if not may_set_retention(viewer):
+        return _forbidden(request)
+    host = session.scalar(select(Host).where(Host.name == name.lower()))
+    if host is None:
+        return error_page(request, 404, "Not found", "There is no such host.")
+    try:
+        set_retention(session, actor_of(viewer), host=host, **_named(_retention_form(mode, days)))
+    except ValueError as exc:
+        return error_page(request, 422, "Not saved", str(exc))
+    return RedirectResponse(f"/hosts/{host.name}", status_code=303)
+
+
+def _named(value: tuple[int | None, bool]) -> dict[str, Any]:
+    return {"days": value[0], "forever": value[1]}
+
+
+def _settings_page(
+    request: Request, viewer: Viewer, session: Session, status_code: int = 200, **context: object
+) -> HTMLResponse:
+    return page(
+        request, "settings.html", viewer, status_code, settings=get_settings(session), **context
+    )
+
+
+@router.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request, viewer: ViewerDep, session: SessionDep) -> HTMLResponse:
+    if not viewer.reads_all:
+        return _forbidden(request)
+    return _settings_page(request, viewer, session)
+
+
+@router.post("/settings", dependencies=[Depends(require_csrf)])
+def change_settings_page(
+    request: Request, viewer: ViewerDep, session: SessionDep,
+    retention_days: Annotated[str, Form()] = "", keep_forever: Annotated[str, Form()] = "",
+    only_admins_map: Annotated[str, Form()] = "", max_upload_mib: Annotated[str, Form()] = "",
+) -> Response:  # fmt: skip
+    if not may_change_settings(viewer):
+        return _forbidden(request)
+    try:
+        days = None if keep_forever else int(retention_days)
+        mib = int(max_upload_mib)
+        update_settings(
+            session, actor_of(viewer), retention_days=days, only_admins_map=bool(only_admins_map),
+            max_upload_bytes=mib * 1024 * 1024,
+        )  # fmt: skip
+    except ValueError as exc:
+        message = str(exc) if "days" in str(exc) or "limit" in str(exc) else "use whole numbers"
+        return _settings_page(request, viewer, session, 422, error=message)
+    return RedirectResponse("/settings", status_code=303)
 
 
 @router.get("/docs", response_class=HTMLResponse)

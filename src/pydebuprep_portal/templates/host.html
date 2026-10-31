@@ -2,7 +2,21 @@
 {% block title %}{{ host }} — pydebuprep portal{% endblock %}
 {% block main %}
 <h1>{{ host }}</h1>
-<p>Team: {% if team %}<a href="/teams/{{ team }}">{{ team }}</a>{% else %}unassigned{% endif %}</p>
+<p>Team: {% if team %}<a href="/teams/{{ team }}">{{ team }}</a>{% else %}unassigned{% endif %}. Reports are kept {{ retention }}.</p>
+{% if viewer.is_admin %}
+<form class="filters" method="post" action="/hosts/{{ host }}/retention">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <label>Retention
+    <select name="mode">
+      <option value="inherit"{% if not host_row.keep_forever and host_row.retention_days is none %} selected{% endif %}>inherit</option>
+      <option value="days"{% if host_row.retention_days %} selected{% endif %}>days</option>
+      <option value="forever"{% if host_row.keep_forever %} selected{% endif %}>keep forever</option>
+    </select>
+  </label>
+  <label>Days <input name="days" inputmode="numeric" size="6" value="{{ host_row.retention_days or '' }}"></label>
+  <button type="submit">Set retention</button>
+</form>
+{% endif %}
 {% if team_choices %}
 <form class="filters" method="post" action="/hosts/{{ host }}/map">
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">

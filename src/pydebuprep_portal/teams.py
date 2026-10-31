@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 from pydebuprep_portal.access import Viewer, may_read_team, valid_team_name
 from pydebuprep_portal.audit import record
 from pydebuprep_portal.models import Host, Report, Team
-from pydebuprep_portal.settings_store import get_settings
+from pydebuprep_portal.retention import describe, team_retention
+from pydebuprep_portal.settings_store import GlobalSettings, get_settings
 
 
 def ensure_teams(session: Session, names: Iterable[str]) -> None:
@@ -49,13 +50,9 @@ class TeamRow:
     retention: str
 
 
-def retention_text(team: Team, global_days: int | None) -> str:
+def retention_text(team: Team, settings: GlobalSettings) -> str:
     """A team's retention as people read it: its own, or the global one it inherits."""
-    if team.keep_forever:
-        return "forever"
-    if team.retention_days is not None:
-        return f"{team.retention_days} days"
-    return "forever (global)" if global_days is None else f"{global_days} days (global)"
+    return describe(team_retention(team, settings))
 
 
 def list_teams(session: Session, viewer: Viewer) -> list[TeamRow]:
@@ -65,9 +62,9 @@ def list_teams(session: Session, viewer: Viewer) -> list[TeamRow]:
     query = select(Team, hosts, reports).order_by(Team.name)
     if not viewer.reads_all:
         query = query.where(or_(Team.name.in_(sorted(viewer.teams)), Team.public))
-    global_days = get_settings(session).retention_days
+    settings = get_settings(session)
     return [
-        TeamRow(team.name, team.public, n_hosts, n_reports, retention_text(team, global_days))
+        TeamRow(team.name, team.public, n_hosts, n_reports, retention_text(team, settings))
         for team, n_hosts, n_reports in session.execute(query)
     ]
 
@@ -102,4 +99,34 @@ def set_visibility(session: Session, actor: str, team: Team, public: bool) -> No
     team.public = public
     record(session, actor, "team.visibility", team.name, old=old,
            new="public" if public else "private")  # fmt: skip
+    session.commit()
+
+
+MAX_RETENTION_DAYS = 36500
+
+
+def set_retention(
+    session: Session,
+    actor: str,
+    *,
+    team: Team | None = None,
+    host: Host | None = None,
+    days: int | None,
+    forever: bool,
+) -> None:
+    """Set a team's or a host's retention (admins): DAYS, FOREVER, or neither to inherit."""
+    target = team if team is not None else host
+    if target is None:  # pragma: no cover - callers pass one
+        raise ValueError("a team or a host")
+    if forever:
+        days = None
+    elif days is not None and not 1 <= days <= MAX_RETENTION_DAYS:
+        raise ValueError(f"retention is 1 to {MAX_RETENTION_DAYS} days")
+    old = {"days": target.retention_days, "forever": target.keep_forever}
+    new = {"days": days, "forever": forever}
+    if old == new:
+        return
+    target.retention_days, target.keep_forever = days, forever
+    label = f"team:{target.name}" if team is not None else f"host:{target.name}"
+    record(session, actor, "retention.set", label, old=old, new=new)
     session.commit()
