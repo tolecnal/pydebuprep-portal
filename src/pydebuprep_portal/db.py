@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 from alembic.config import Config
+from fastapi import Request
 from sqlalchemy import Engine, MetaData, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -37,3 +39,10 @@ def migrations_config(url: str) -> Config:
     config.set_main_option("script_location", str(MIGRATIONS))
     config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
     return config
+
+
+def get_session(request: Request) -> Iterator[Session]:
+    """A session per request (FastAPI dependency)."""
+    maker: sessionmaker[Session] = request.app.state.sessionmaker
+    with maker() as session:
+        yield session

@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
+import socket
+import threading
+import time
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 
 import pytest
+import uvicorn
 from alembic import command
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
@@ -14,6 +19,7 @@ from sqlalchemy.orm import Session
 from pydebuprep_portal.app import create_app
 from pydebuprep_portal.db import make_engine, make_sessionmaker, migrations_config
 from pydebuprep_portal.settings import Settings, load_settings
+from pydebuprep_portal.tokens import create_token
 
 SECRET = "s" * 32
 
@@ -79,3 +85,55 @@ def db_env(db: Session, db_url: str, monkeypatch: pytest.MonkeyPatch) -> dict[st
     for name, value in env.items():
         monkeypatch.setenv(name, value)
     return env
+
+
+@pytest.fixture
+def make_client(db: Session, db_url: str) -> Iterator[Callable[..., TestClient]]:
+    """A test client of a portal on the test database, with extra PORTAL_* settings."""
+    clients: list[TestClient] = []
+
+    def make(**env: str) -> TestClient:
+        c = TestClient(create_app(test_settings(PORTAL_DATABASE_URL=db_url, **env)))
+        clients.append(c.__enter__())
+        return c
+
+    yield make
+    for c in clients:
+        c.__exit__(None, None, None)
+
+
+@pytest.fixture
+def api(make_client: Callable[..., TestClient]) -> TestClient:
+    return make_client()
+
+
+@pytest.fixture
+def token(db: Session) -> str:
+    return create_token(db, kind="global", name="test", created_by="test", expires_at=None)[1]
+
+
+@dataclass
+class LivePortal:
+    base_url: str
+
+
+@pytest.fixture
+def live_portal(db: Session, db_url: str) -> Iterator[LivePortal]:
+    """The portal served by uvicorn on a free local port, over plain HTTP."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    base = f"http://127.0.0.1:{port}"
+    app = create_app(
+        test_settings(PORTAL_DATABASE_URL=db_url, PORTAL_BASE_URL=base, PORTAL_ALLOW_HTTP="1")
+    )
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(200):
+        if server.started:
+            break
+        time.sleep(0.02)
+    yield LivePortal(base)
+    server.should_exit = True
+    thread.join(10)

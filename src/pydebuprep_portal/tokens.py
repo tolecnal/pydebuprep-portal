@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 
 from pydebuprep_portal.models import TOKEN_KINDS, Token
 
-TOKEN_PREFIX = "pdp_"  # nosec B105 - a prefix, not a secret
+# A prefix, not a secret.
+TOKEN_PREFIX = "pdp_"  # nosec B105
 BEARER = re.compile(r"Bearer pdp_([0-9a-f]{8})_([A-Za-z0-9_-]{43})", re.IGNORECASE)
 # Compared against when the public id is unknown, so a miss takes as long as a hit.
 _NO_HASH = "0" * 64
