@@ -179,3 +179,14 @@ def render_served(settings: Settings, config: Config, version: ConfigVersion) ->
 
 def etag(text: str) -> str:
     return '"' + hashlib.sha256(text.encode()).hexdigest()[:32] + '"'
+
+
+def served_problems(settings: Settings, config: Config, version: ConfigVersion) -> list[str]:
+    """Why VERSION is no longer a config hosts would accept (pydebuprep's rules may have
+    tightened since it was saved); empty when it still is."""
+    url = served_url(settings, config.team.name, config.name)
+    try:
+        validate_values(version.values, url, settings.base_url)
+    except ConfigValuesError as exc:
+        return exc.errors
+    return []

@@ -4,6 +4,7 @@
 <h1>Config {{ team }}/{{ config.name }}</h1>
 <p>Hosts run with it as root, with their upload token in <code>/etc/pydebuprep/token</code>:</p>
 <pre class="command">sudo pydebuprep --config {{ url }}</pre>
+{% if problems %}<div class="notice"><p>The newest version no longer passes pydebuprep's rules, so hosts get an error and keep using their saved copy. Save the config again to fix it:</p><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
 {% if unchanged %}<p class="notice">No changes: the config is what it was.</p>{% endif %}
 {% if errors %}<div class="notice"><p>Not saved:</p><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
 <form method="post" action="/configs/{{ team }}/{{ config.name }}" class="generator">

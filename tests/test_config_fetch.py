@@ -95,3 +95,27 @@ def test_fetch_records_token_use(
     public_id = fetch_tokens["web1-host"].split("_")[1]
     db.expire_all()
     assert db.query(Token).filter_by(public_id=public_id).one().last_used_at is not None
+
+
+def _store_raw(db: Session, values: dict) -> None:  # type: ignore[type-arg]
+    """A version saved before the rules changed: stored without today's validation."""
+    from datetime import UTC, datetime
+
+    from pydebuprep_portal.models import Config, ConfigVersion
+
+    config = db.query(Config).one()
+    db.add(ConfigVersion(config_id=config.id, version=len(config.versions) + 1, values=values,
+                         created_at=datetime.now(UTC), created_by="before"))  # fmt: skip
+    db.commit()
+
+
+def test_a_stored_version_hosts_would_refuse_is_not_served(
+    api: TestClient, fetch_tokens: dict[str, str], db: Session, signed_in
+) -> None:  # type: ignore[no-untyped-def]
+    _store_raw(db, {"checks": {"python-venvs": {"search_paths": ["/"]}}})
+    resp = get(api, fetch_tokens["global"])
+    assert resp.status_code == 409
+    assert "search_paths" not in resp.text or "can't be set" in resp.text
+    assert not resp.text.startswith("#")
+    page = signed_in("pydebuprep-team-web").get(URL.replace("/api/v1", ""))
+    assert "no longer passes" in page.text and "search_paths" in page.text

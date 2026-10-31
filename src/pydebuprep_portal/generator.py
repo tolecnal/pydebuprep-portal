@@ -236,12 +236,23 @@ def _shape_errors(values: Mapping[str, Any]) -> list[str]:
     return errors
 
 
+def _nul_errors(values: object, path: str = "") -> list[str]:
+    """NUL characters: PostgreSQL can't store them, and no setting needs one."""
+    if isinstance(values, str):
+        return [f"{path or 'value'}: contains a NUL character"] if "\x00" in values else []
+    if isinstance(values, Mapping):
+        return [e for k, v in values.items() for e in _nul_errors(v, f"{path}.{k}".lstrip("."))]
+    if isinstance(values, list):
+        return [e for v in values for e in _nul_errors(v, path)]
+    return []
+
+
 def validate_values(values: object, served_url: str, upload_url: str) -> dict[str, Any]:
     """Check VALUES as a config served from SERVED_URL; the values without defaults.
     ConfigValuesError lists every problem, in pydebuprep's words where it found them."""
     if not isinstance(values, Mapping):
         raise ConfigValuesError(["a config is a mapping with report, logs and checks"])
-    errors = _shape_errors(values)
+    errors = _shape_errors(values) + _nul_errors(values)
     if errors:
         raise ConfigValuesError(errors)
     text = render_config(values, upload_url=upload_url, header="")
@@ -252,6 +263,8 @@ def validate_values(values: object, served_url: str, upload_url: str) -> dict[st
     except ConfigError as exc:
         prefix = f"{served_url}: "
         raise ConfigValuesError([e.removeprefix(prefix) for e in exc.errors]) from None
+    except RecursionError:  # re.compile on a pattern nested thousands deep
+        raise ConfigValuesError(["a pattern is nested too deeply"]) from None
     return _normalised(config)
 
 

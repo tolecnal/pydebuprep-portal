@@ -216,3 +216,16 @@ def test_validate_keeps_every_kind_of_change() -> None:
     default = next(o for c in checks.ALL_CHECKS if c.id == "disk-space" for o in c.options).default
     first = next(o for c in checks.ALL_CHECKS if c.id == "disk-space" for o in c.options).name
     assert validate_values({"checks": {"disk-space": {first: default}}}, SERVED, UPLOAD) == {}
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"logs": {"ignore": ["a\x00b"]}},
+        {"checks": {"disk-space": {"exclude_mounts": ["x\x00"]}}},
+        {"logs": {"ignore": ["(" * 5000 + ")" * 5000]}},
+    ],
+)
+def test_nul_and_deeply_nested_patterns_are_refused(values: Any) -> None:
+    with pytest.raises(ConfigValuesError):
+        validate_values(values, SERVED, UPLOAD)

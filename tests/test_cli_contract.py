@@ -102,3 +102,34 @@ def test_pydebuprep_load_remote_config_saves_a_copy(
     assert (info.source, info.stale) == (url, False)
     assert len(list(cache.iterdir())) == 1
     assert warnings == []
+
+
+def test_pydebuprep_keeps_its_saved_copy_when_a_config_no_longer_passes(
+    live_portal: LivePortal, fetch_tokens: dict[str, str], tmp_path: Path, db: Session
+) -> None:
+    from datetime import UTC, datetime
+
+    from pydebuprep.remote_config import load_remote_config
+
+    from pydebuprep_portal.models import Config, ConfigVersion
+
+    token_file = tmp_path / "token"
+    token_file.write_text(fetch_tokens["global"] + "\n")
+    token_file.chmod(0o600)
+    cache = tmp_path / "configs"
+    cache.mkdir(mode=0o700)
+    url = f"{live_portal.base_url}/api/v1/configs/web/default"
+    warnings: list[str] = []
+
+    def load() -> tuple[object, object]:
+        return load_remote_config(url, token_file=str(token_file), conn=Connection(allow_http=True),
+                                  cache_dir=str(cache), now=datetime.now(UTC), warn=warnings.append, env={})  # fmt: skip
+
+    load()  # a good copy is saved
+    config = db.query(Config).one()
+    db.add(ConfigVersion(config_id=config.id, version=3, created_by="before", created_at=datetime.now(UTC),
+                         values={"checks": {"python-venvs": {"search_paths": ["/"]}}}))  # fmt: skip
+    db.commit()
+    settings, info = load()
+    assert info.stale is True  # type: ignore[attr-defined]
+    assert settings.report.todo is True  # type: ignore[attr-defined]  # the saved copy, version 2

@@ -34,6 +34,7 @@ from pydebuprep_portal.configs import (
     newest,
     render_served,
     save_config,
+    served_problems,
     served_url,
 )
 from pydebuprep_portal.db import get_session
@@ -631,7 +632,8 @@ def _config_page(
         url=served_url(settings, config.team.name, config.name),
         yaml=render_served(settings, config, current), versions=list(reversed(config.versions)),
         may_edit=may_edit_configs(viewer, config.team.name), report_fields=REPORT_FIELDS,
-        logs_field=LOGS_FIELD, check_forms=check_forms(), shown=values, **context,
+        logs_field=LOGS_FIELD, check_forms=check_forms(), shown=values,
+        problems=served_problems(settings, config, current), **context,
     )  # fmt: skip
 
 

@@ -107,3 +107,13 @@ def test_api_version_yaml(client: TestClient, bearer: Bearer) -> None:
         "todo": True
     }
     assert client.get(f"{BASE}/default/versions/9", headers=h).status_code == 404
+
+
+def test_api_nul_is_a_422_not_a_500(client: TestClient, bearer: Bearer) -> None:
+    h = bearer(*MEMBER)
+    assert (
+        client.post(
+            BASE, json={"name": "n", "values": {"logs": {"ignore": ["a\u0000b"]}}}, headers=h
+        ).status_code
+        == 422
+    )

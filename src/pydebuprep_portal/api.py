@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
@@ -34,6 +35,7 @@ from pydebuprep_portal.configs import (
     newest,
     render_served,
     save_config,
+    served_problems,
     served_url,
 )
 from pydebuprep_portal.db import get_session
@@ -73,6 +75,7 @@ from pydebuprep_portal.tokens import (
     token_request,
 )
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
 
 
@@ -669,6 +672,7 @@ CONFIG_NOT_FOUND = "no such config for this token"
         304: {"description": "Unchanged since the ETag in If-None-Match"},
         401: {"description": "No valid upload token"},
         404: {"description": "No such config, or not one this token may fetch"},
+        409: {"description": "The stored config no longer passes pydebuprep's rules"},
     },
 )
 def host_config(
@@ -691,7 +695,13 @@ def host_config(
     )
     if config is None or (token.kind != "global" and token.team_id != config.team_id):
         raise HTTPException(404, CONFIG_NOT_FOUND)
-    text = render_served(request.app.state.settings, config, newest(config))
+    settings = request.app.state.settings
+    problems = served_problems(settings, config, newest(config))
+    if problems:
+        # Never serve what the CLI would refuse: an error keeps hosts on their saved copy.
+        log.warning("config %s/%s no longer passes: %s", team, name, "; ".join(problems))
+        raise HTTPException(409, "this config no longer passes pydebuprep's rules; save it again")
+    text = render_served(settings, config, newest(config))
     tag = etag(text)
     token.last_used_at = now
     session.commit()
