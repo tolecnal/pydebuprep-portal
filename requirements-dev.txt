@@ -382,6 +382,7 @@ cryptography==50.0.2 \
     # via
     #   authlib
     #   joserfc
+    #   types-authlib
 fastapi==0.162.0 \
     --hash=sha256:3785963de305dd09912426cb81f2d230fce98ab3521cdfe97265c8d14983128c \
     --hash=sha256:6a22c1e2e6e32e0633ee7e170f00009a29b8228b16feb219ee42f32fd8d88a8f
@@ -1366,6 +1367,10 @@ swagger-ui-bundle==1.1.0 \
     --hash=sha256:20673c3431c8733d5d1615ecf79d9acf30cff75202acaf21a7d9c7f489714529 \
     --hash=sha256:f7526f7bb99923e10594c54247265839bec97e96b0438561ac86faf40d40dd57
     # via -r requirements.in
+types-authlib==1.8.0.20260911 \
+    --hash=sha256:0617c4a2361a605144bae0850f70c18edd5265abec11af66235a02a1b415444e \
+    --hash=sha256:cde5e55bca5e908438facc8fc701197bf540af880dff7b8ca8cf40a08258a62a
+    # via -r requirements-dev.in
 types-pyyaml==6.0.12.20261030 \
     --hash=sha256:508cc80546918201026a955356222111224e1f4f7deab0b91f2a95933f764e67 \
     --hash=sha256:9123d707aa31a3883eeb2cb290537c75246dfcb1c00abed7a70f5419d3bd31ae

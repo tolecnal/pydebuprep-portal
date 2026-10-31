@@ -3,19 +3,24 @@
 from __future__ import annotations
 
 import os
+import re
 import socket
 import threading
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import uvicorn
 from alembic import command
 from fastapi.testclient import TestClient
+from httpx import Response
 from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
 
+from oidc_stub import OIDCStub
 from pydebuprep_portal.app import create_app
 from pydebuprep_portal.db import make_engine, make_sessionmaker, migrations_config
 from pydebuprep_portal.settings import Settings, load_settings
@@ -93,7 +98,8 @@ def make_client(db: Session, db_url: str) -> Iterator[Callable[..., TestClient]]
     clients: list[TestClient] = []
 
     def make(**env: str) -> TestClient:
-        c = TestClient(create_app(test_settings(PORTAL_DATABASE_URL=db_url, **env)))
+        app = create_app(test_settings(PORTAL_DATABASE_URL=db_url, **env))
+        c = TestClient(app, base_url="https://testserver")
         clients.append(c.__enter__())
         return c
 
@@ -137,3 +143,37 @@ def live_portal(db: Session, db_url: str) -> Iterator[LivePortal]:
     yield LivePortal(base)
     server.should_exit = True
     thread.join(10)
+
+
+# --- sign-in ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def stub() -> Iterator[OIDCStub]:
+    s = OIDCStub()
+    yield s
+    s.close()
+
+
+@pytest.fixture
+def oidc_client(make_client: Callable[..., TestClient], stub: OIDCStub) -> TestClient:
+    """A portal whose OIDC provider is the stub."""
+    return make_client(PORTAL_OIDC_ISSUER=stub.issuer)
+
+
+def login(client: TestClient, stub: OIDCStub, next_path: str = "/", **claims: Any) -> Response:
+    """Sign in through the stub: /login, the provider (simulated), /auth/callback."""
+    resp = client.get("/login", params={"next": next_path}, follow_redirects=False)
+    assert resp.status_code in (302, 303), resp.text
+    query = parse_qs(urlsplit(resp.headers["location"]).query)
+    code = stub.code_for(query["nonce"][0], **claims)
+    return client.get(
+        "/auth/callback", params={"code": code, "state": query["state"][0]}, follow_redirects=False
+    )
+
+
+def csrf_of(client: TestClient) -> str:
+    """The CSRF token from a page's logout form."""
+    match = re.search(r'name="csrf_token" value="([^"]+)"', client.get("/").text)
+    assert match, "no CSRF token on the page"
+    return match.group(1)

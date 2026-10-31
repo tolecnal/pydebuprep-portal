@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}pydebuprep portal{% endblock %}</title>
+<link rel="stylesheet" href="/static/portal.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">pydebuprep portal</a>
+  {% if viewer %}
+  <nav>{% block nav %}{% endblock %}</nav>
+  <div class="who">
+    <span class="name">{{ viewer.name }}</span>
+    {% for role in viewer.roles | sort %}<span class="role">{{ role }}</span>{% endfor %}
+    <form method="post" action="/logout" class="inline">
+      <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+      <button type="submit">Sign out</button>
+    </form>
+  </div>
+  {% endif %}
+</header>
+<main>
+{% block main %}{% endblock %}
+</main>
+</body>
+</html>

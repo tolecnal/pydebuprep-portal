@@ -10,6 +10,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from pydebuprep_portal.access import Viewer
+from pydebuprep_portal.auth import api_viewer
 from pydebuprep_portal.db import get_session
 from pydebuprep_portal.ingest import IngestError, check_headers, read_body, store_report
 from pydebuprep_portal.settings import Settings
@@ -57,3 +59,14 @@ async def upload(
         raise HTTPException(exc.status, exc.detail) from None
     response.status_code = 201 if created else 200
     return Stored(id=report.id, url=f"{settings.base_url}/reports/{report.id}")
+
+
+class WhoAmI(BaseModel):
+    subject: str
+    name: str
+    roles: list[str]
+
+
+@router.get("/whoami", summary="Who the access token belongs to")
+def whoami(viewer: Annotated[Viewer, Depends(api_viewer)]) -> WhoAmI:
+    return WhoAmI(subject=viewer.subject, name=viewer.name, roles=sorted(viewer.roles))
