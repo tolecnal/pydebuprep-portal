@@ -49,10 +49,10 @@ def test_env_example_lists_every_setting() -> None:
     assert "PORTAL_FORWARDED_ALLOW_IPS" in example and "POSTGRES_PASSWORD" in example
 
 
-def test_requirements_pin_pydebuprep_0_5_0() -> None:
+def test_requirements_pin_pydebuprep_0_6_0() -> None:
     text = (ROOT / "requirements.txt").read_text()
     assert re.search(
-        r"^pydebuprep @ https://github\.com/tolecnal/pydebuprep/archive/refs/tags/v0\.5\.0\.tar\.gz \\\n"
+        r"^pydebuprep @ https://github\.com/tolecnal/pydebuprep/archive/refs/tags/v0\.6\.0\.tar\.gz \\\n"
         r"\s+--hash=sha256:[0-9a-f]{64}$",
         text,
         re.MULTILINE,
@@ -84,6 +84,7 @@ def test_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_smoke_script_uploads_with_the_cli() -> None:
     text = (ROOT / "scripts/smoke.sh").read_text()
     assert "manage create-token" in text and "--team smoke" in text
+    assert "create-config smoke default" in text and "configtest" in text
     assert "upload --allow-http" in text
     assert "docker compose" in text and "down -v" in text
     assert "smoke: ok" in text
@@ -95,3 +96,10 @@ def test_readme_covers_teams() -> None:
                   "only admins map hosts", "host token", "team token"):  # fmt: skip
         assert topic in text, topic
     assert "PORTAL_MAX_UPLOAD_BYTES" not in text
+
+
+def test_readme_covers_configs() -> None:
+    text = (ROOT / "README.md").read_text()
+    for topic in ("api/v1/configs", "--config https://", "version", "credentials_file",
+                  "manage create-config"):  # fmt: skip
+        assert topic in text, topic

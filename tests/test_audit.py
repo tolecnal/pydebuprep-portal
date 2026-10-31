@@ -49,7 +49,8 @@ def test_actor_of() -> None:
 # --- the audit log page and API --------------------------------------------------
 
 ACTIONS = {"settings.update", "team.create", "team.visibility", "token.create", "token.revoke",
-           "host.map", "host.unmap", "retention.set", "retention.expire", "report.delete"}  # fmt: skip
+           "host.map", "host.unmap", "retention.set", "retention.expire", "report.delete",
+           "config.create", "config.save"}  # fmt: skip
 
 
 def test_audit_page_and_api_for_admins_and_auditors(
@@ -93,6 +94,8 @@ def test_every_change_is_audited(
     post("/teams/ops/retention", mode="days", days="90")
     expire_reports(db, datetime.now(UTC))
     post(f"/reports/{newest.id}/delete")
+    post("/configs", team="ops", name="default")
+    post("/configs/ops/default", _fields="report.todo", **{"report.todo": "1"})
     seen = {e.action for e in list_audit(db, limit=100)}
     assert seen == ACTIONS
 
