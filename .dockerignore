@@ -1,0 +1,9 @@
+*
+!requirements.txt
+!requirements-build.txt
+!pyproject.toml
+!README.md
+!LICENSE
+!src/
+!docker-entrypoint.sh
+**/__pycache__

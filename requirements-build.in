@@ -1,0 +1,4 @@
+# Build tools installed before requirements.txt (the image builds without isolation):
+#   make lock
+-c requirements.txt
+setuptools

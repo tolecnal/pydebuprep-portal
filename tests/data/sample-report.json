@@ -1,0 +1,76 @@
+{
+  "schema_version": "1",
+  "tool": {
+    "name": "pydebuprep",
+    "version": "0.5.0"
+  },
+  "generated_at": "2026-10-31T09:00:00+00:00",
+  "host": {
+    "hostname": "smoke-test",
+    "os_id": "debian",
+    "os_version": "13",
+    "codename": "trixie",
+    "kernel": "6.12.0-1-amd64",
+    "is_root": true
+  },
+  "baseline": null,
+  "summary": {
+    "critical": 1,
+    "warning": 1,
+    "info": 0,
+    "ok": 1,
+    "skipped": 0,
+    "error": 0,
+    "exit_code": 2
+  },
+  "results": [
+    {
+      "id": "apt-sources",
+      "title": "apt-sources",
+      "category": "system",
+      "status": "findings",
+      "skipped_reason": null,
+      "error": null,
+      "findings": [
+        {
+          "severity": "critical",
+          "title": "Repository still targets bookworm",
+          "detail": "",
+          "evidence": [],
+          "remediation": [],
+          "references": []
+        }
+      ],
+      "baseline_diff": null
+    },
+    {
+      "id": "disk-space",
+      "title": "disk-space",
+      "category": "system",
+      "status": "findings",
+      "skipped_reason": null,
+      "error": null,
+      "findings": [
+        {
+          "severity": "warning",
+          "title": "Disk is full on /var",
+          "detail": "",
+          "evidence": [],
+          "remediation": [],
+          "references": []
+        }
+      ],
+      "baseline_diff": null
+    },
+    {
+      "id": "fstab",
+      "title": "fstab",
+      "category": "storage",
+      "status": "ok",
+      "skipped_reason": null,
+      "error": null,
+      "findings": [],
+      "baseline_diff": null
+    }
+  ]
+}

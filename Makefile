@@ -12,6 +12,7 @@ venv:
 lock:
 	uv pip compile -q --python-version 3.12 --generate-hashes requirements.in -o requirements.txt
 	uv pip compile -q --python-version 3.12 --generate-hashes requirements-dev.in -o requirements-dev.txt
+	uv pip compile -q --python-version 3.12 --generate-hashes requirements-build.in -o requirements-build.txt
 
 lint:
 	$(PYTHON) -m ruff check src tests

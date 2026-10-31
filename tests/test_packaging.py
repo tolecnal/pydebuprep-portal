@@ -1,0 +1,89 @@
+"""The Docker image, compose file, settings template and README."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+import yaml
+from fastapi import FastAPI
+from pydebuprep.reportfile import load_report
+
+from conftest import BASE_ENV
+from pydebuprep_portal.app import from_environment
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_dockerfile_base_and_user() -> None:
+    text = (ROOT / "Dockerfile").read_text()
+    assert re.findall(r"^FROM (\S+)", text, re.MULTILINE) == ["debian:trixie-slim"]
+    assert "USER portal" in text
+    assert "--require-hashes" in text
+    assert "--no-build-isolation" in text  # build tools come from the hashed lock too
+    assert "HEALTHCHECK" in text
+    assert "--no-install-recommends" in text
+    entrypoint = (ROOT / "docker-entrypoint.sh").read_text()
+    assert "pydebuprep_portal.manage migrate" in entrypoint
+    assert "--factory pydebuprep_portal.app:from_environment" in entrypoint
+    assert "--proxy-headers" in entrypoint
+
+
+def test_compose_runs_portal_and_postgres() -> None:
+    compose = yaml.safe_load((ROOT / "compose.yaml").read_text())
+    services = compose["services"]
+    assert set(services) == {"db", "portal"}
+    assert services["db"]["image"].startswith("postgres:17")
+    assert services["portal"]["depends_on"]["db"]["condition"] == "service_healthy"
+    assert services["portal"]["ports"] == ["127.0.0.1:${PORTAL_PORT:-8000}:8000"]
+    assert "healthcheck" in services["db"]
+
+
+def test_env_example_lists_every_setting() -> None:
+    read = set(
+        re.findall(r'"(PORTAL_[A-Z_]+)"', (ROOT / "src/pydebuprep_portal/settings.py").read_text())
+    )
+    example = (ROOT / ".env.example").read_text()
+    assert read <= set(re.findall(r"^#? ?(PORTAL_[A-Z_]+)=", example, re.MULTILINE))
+    assert "PORTAL_FORWARDED_ALLOW_IPS" in example and "POSTGRES_PASSWORD" in example
+
+
+def test_requirements_pin_pydebuprep_0_5_0() -> None:
+    text = (ROOT / "requirements.txt").read_text()
+    assert re.search(
+        r"^pydebuprep @ https://github\.com/tolecnal/pydebuprep/archive/refs/tags/v0\.5\.0\.tar\.gz \\\n"
+        r"\s+--hash=sha256:[0-9a-f]{64}$",
+        text,
+        re.MULTILINE,
+    )
+    build = (ROOT / "requirements-build.txt").read_text()
+    pinned = re.search(r"^setuptools==(\S+) \\$", build, re.MULTILINE)
+    assert pinned and f"setuptools=={pinned.group(1)} \\" in text  # the same version in both
+
+
+def test_readme_covers_setup() -> None:
+    text = (ROOT / "README.md").read_text()
+    for topic in ("docker compose", "Keycloak", "pydebuprep-admins", "pydebuprep-auditors",
+                  "manage create-token", "/etc/pydebuprep/token", "upload:", "ID token",
+                  "/docs", "PORTAL_BASE_URL"):  # fmt: skip
+        assert topic in text, topic
+
+
+def test_sample_report_is_a_report() -> None:
+    report = load_report((ROOT / "tests/data/sample-report.json").read_text())
+    assert report.host.hostname == "smoke-test"
+
+
+def test_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name, value in BASE_ENV.items():
+        monkeypatch.setenv(name, value)
+    assert isinstance(from_environment(), FastAPI)
+
+
+def test_smoke_script_uploads_with_the_cli() -> None:
+    text = (ROOT / "scripts/smoke.sh").read_text()
+    assert "manage create-token" in text
+    assert "upload --allow-http" in text
+    assert "docker compose" in text and "down -v" in text
+    assert "smoke: ok" in text

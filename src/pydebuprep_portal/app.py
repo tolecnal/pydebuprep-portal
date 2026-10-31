@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -13,7 +14,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from pydebuprep_portal import __version__, api, auth, pages
 from pydebuprep_portal.db import make_engine, make_sessionmaker
 from pydebuprep_portal.security import SecurityHeaders
-from pydebuprep_portal.settings import Settings
+from pydebuprep_portal.settings import Settings, load_settings
 
 STATIC = Path(__file__).parent / "static"
 SESSION_SECONDS = 8 * 3600
@@ -57,3 +58,8 @@ def create_app(settings: Settings) -> FastAPI:
         return {"status": "ok"}
 
     return app
+
+
+def from_environment() -> FastAPI:
+    """The app configured from PORTAL_* variables (uvicorn --factory)."""
+    return create_app(load_settings(os.environ))
