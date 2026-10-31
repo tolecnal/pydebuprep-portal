@@ -55,7 +55,7 @@ files = ["src"]
 
 [tool.coverage.run]
 branch = true
-source = ["pydebuprep_portal"]
+source = ["src/pydebuprep_portal"]
 
 [tool.coverage.report]
 # Every line and branch must be covered; mark genuinely untestable code with
