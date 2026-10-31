@@ -16,6 +16,7 @@ from pydebuprep_portal.access import (
     Viewer,
     may_change_settings,
     may_delete_reports,
+    may_edit_configs,
     may_manage_tokens,
     may_read_audit,
     may_read_tokens,
@@ -24,7 +25,27 @@ from pydebuprep_portal.access import (
 )
 from pydebuprep_portal.audit import actor_of, list_audit
 from pydebuprep_portal.auth import page_viewer
+from pydebuprep_portal.configs import (
+    ConfigError,
+    create_config,
+    get_config,
+    get_version,
+    list_configs,
+    newest,
+    render_served,
+    save_config,
+    served_url,
+)
 from pydebuprep_portal.db import get_session
+from pydebuprep_portal.generator import (
+    LOGS_FIELD,
+    REPORT_FIELDS,
+    ConfigValuesError,
+    check_forms,
+    form_values,
+    generator_field,
+    values_from_form,
+)
 from pydebuprep_portal.mapping import (
     MappingError,
     map_host,
@@ -33,7 +54,7 @@ from pydebuprep_portal.mapping import (
     team_choices,
     unmap_host,
 )
-from pydebuprep_portal.models import Host, Team
+from pydebuprep_portal.models import Config, Host, Team
 from pydebuprep_portal.queries import (
     delete_report,
     get_report,
@@ -546,6 +567,126 @@ def audit_page(
     return page(
         request, "audit.html", viewer, entries=entries, next_before=next_before, action=action
     )
+
+
+def _configs_page(
+    request: Request, viewer: Viewer, session: Session, status_code: int = 200, **context: object
+) -> HTMLResponse:
+    if viewer.is_admin:
+        editable = list(session.scalars(select(Team.name).order_by(Team.name)))
+    else:
+        editable = sorted(viewer.teams)
+    return page(
+        request, "configs.html", viewer, status_code, configs=list_configs(session, viewer),
+        editable_teams=editable, **context,
+    )  # fmt: skip
+
+
+@router.get("/configs", response_class=HTMLResponse)
+def configs_page(request: Request, viewer: ViewerDep, session: SessionDep) -> HTMLResponse:
+    return _configs_page(request, viewer, session)
+
+
+@router.post("/configs", dependencies=[Depends(require_csrf)])
+def create_config_page(
+    request: Request, viewer: ViewerDep, session: SessionDep,
+    team: Annotated[str, Form()] = "", name: Annotated[str, Form()] = "",
+) -> Response:  # fmt: skip
+    try:
+        config = create_config(session, viewer, request.app.state.settings, team, name)
+    except ConfigError as exc:
+        if exc.status == 422:
+            return _configs_page(request, viewer, session, 422, error=exc.detail, form_name=name)
+        return error_page(request, exc.status, "Not done", exc.detail)
+    return RedirectResponse(f"/configs/{team}/{config.name}", status_code=303)
+
+
+async def form_data(request: Request) -> dict[str, Any]:
+    """The submitted form, `_fields` as a list (the generator form's fields)."""
+    form = await request.form()
+    data: dict[str, Any] = {k: v for k, v in form.multi_items() if k != "_fields"}
+    data["_fields"] = form.getlist("_fields")
+    return data
+
+
+def _typed(form: dict[str, Any]) -> dict[str, object]:
+    """What was typed into each generator field, to show it again after an error."""
+    shown: dict[str, object] = {}
+    for key in form.get("_fields", []):
+        f = generator_field(key)
+        if f is not None:
+            shown[key] = key in form if f.kind == "bool" else form.get(key, "")
+    return shown
+
+
+def _config_page(
+    request: Request, viewer: Viewer, session: Session, config: Config, status_code: int = 200,
+    shown: dict[str, object] | None = None, **context: object,
+) -> HTMLResponse:  # fmt: skip
+    settings = request.app.state.settings
+    current = newest(config)
+    values = form_values(current.values) | (shown or {})
+    return page(
+        request, "config.html", viewer, status_code, config=config, team=config.team.name,
+        url=served_url(settings, config.team.name, config.name),
+        yaml=render_served(settings, config, current), versions=list(reversed(config.versions)),
+        may_edit=may_edit_configs(viewer, config.team.name), report_fields=REPORT_FIELDS,
+        logs_field=LOGS_FIELD, check_forms=check_forms(), shown=values, **context,
+    )  # fmt: skip
+
+
+def _config_not_found(request: Request) -> HTMLResponse:
+    return error_page(request, 404, "Not found", "There is no such config, or you can't see it.")
+
+
+@router.get("/configs/{team}/{name}", response_class=HTMLResponse)
+def config_page(
+    request: Request, team: str, name: str, viewer: ViewerDep, session: SessionDep,
+    unchanged: str = "",
+) -> HTMLResponse:  # fmt: skip
+    config = get_config(session, viewer, team, name)
+    if config is None:
+        return _config_not_found(request)
+    return _config_page(request, viewer, session, config, unchanged=bool(unchanged))
+
+
+@router.post("/configs/{team}/{name}", dependencies=[Depends(require_csrf)])
+def save_config_page(
+    request: Request, team: str, name: str, viewer: ViewerDep, session: SessionDep,
+    form: Annotated[dict[str, Any], Depends(form_data)],
+) -> Response:  # fmt: skip
+    config = get_config(session, viewer, team, name)
+    if config is None:
+        return _config_not_found(request)
+    try:
+        values = values_from_form(form)
+        saved = save_config(session, viewer, request.app.state.settings, team, name, values)
+    except ConfigValuesError as exc:
+        errors = exc.errors
+    except ConfigError as exc:
+        if exc.status != 422:
+            return error_page(request, exc.status, "Not done", exc.detail)
+        errors = exc.errors
+    else:
+        suffix = "" if saved else "?unchanged=1"
+        return RedirectResponse(f"/configs/{team}/{name}{suffix}", status_code=303)
+    config = get_config(session, viewer, team, name) or config
+    return _config_page(request, viewer, session, config, 422, shown=_typed(form), errors=errors)
+
+
+@router.get("/configs/{team}/{name}/versions/{number}", response_class=HTMLResponse)
+def config_version_page(
+    request: Request, team: str, name: str, number: int, viewer: ViewerDep, session: SessionDep
+) -> HTMLResponse:
+    config = get_config(session, viewer, team, name)
+    version = None if config is None else get_version(config, number)
+    if config is None or version is None:
+        return _config_not_found(request)
+    text = render_served(request.app.state.settings, config, version)
+    return page(
+        request, "config_version.html", viewer, config=config, team=team, version=version,
+        yaml=text,
+    )  # fmt: skip
 
 
 @router.get("/docs", response_class=HTMLResponse)

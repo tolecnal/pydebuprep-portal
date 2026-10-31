@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}{{ team }}/{{ config.name }} version {{ version.version }} — pydebuprep portal{% endblock %}
+{% block main %}
+<h1><a href="/configs/{{ team }}/{{ config.name }}">{{ team }}/{{ config.name }}</a>, version {{ version.version }}</h1>
+<p class="empty">Saved {{ version.created_at | utc }} by {{ version.created_by }}.</p>
+<pre class="yaml">{{ yaml }}</pre>
+{% endblock %}

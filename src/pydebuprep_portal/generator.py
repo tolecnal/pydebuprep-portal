@@ -131,6 +131,10 @@ def _fields() -> dict[str, Field]:
     return {f.key: f for f in every}
 
 
+def generator_field(key: str) -> Field | None:
+    return _fields().get(key)
+
+
 def _get(values: Mapping[str, Any], key: str) -> Any:
     node: Any = values
     for part in key.split(".", 2) if key.startswith("checks.") else key.split("."):

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Configs — pydebuprep portal{% endblock %}
+{% block main %}
+<h1>Configs</h1>
+<p class="empty">A team's configs, built from pydebuprep's own checks. Hosts run with one through <code>sudo pydebuprep --config https://…/api/v1/configs/&lt;team&gt;/&lt;name&gt;</code> and the token they upload with.</p>
+{% if error %}<p class="notice">{{ error }}</p>{% endif %}
+{% if editable_teams %}
+<form class="filters" method="post" action="/configs">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <label>Team <select name="team">{% for name in editable_teams %}<option value="{{ name }}">{{ name }}</option>{% endfor %}</select></label>
+  <label>Name <input name="name" maxlength="63" required value="{{ form_name or '' }}" placeholder="default"></label>
+  <button type="submit">Create a config</button>
+</form>
+{% endif %}
+{% if configs %}
+<table>
+  <thead><tr><th>Config</th><th>Version</th><th>Saved</th><th>By</th></tr></thead>
+  <tbody>
+  {% for row in configs %}
+  <tr>
+    <td><a href="/configs/{{ row.team }}/{{ row.name }}">{{ row.team }}/{{ row.name }}</a></td>
+    <td class="num">{{ row.version }}</td>
+    <td>{{ row.updated_at | utc }}</td>
+    <td>{{ row.updated_by }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No configs to show.</p>
+{% endif %}
+{% endblock %}

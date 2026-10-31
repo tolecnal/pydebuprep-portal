@@ -1,0 +1,11 @@
+<label class="field">
+  <span class="name">{{ f.label }}</span>
+  {% set value = shown[f.key] %}
+  {% if f.kind == "bool" %}<input type="checkbox" name="{{ f.key }}" value="1"{% if value %} checked{% endif %}>
+  {% elif f.kind == "choice" %}<select name="{{ f.key }}">{% for choice in f.choices %}<option value="{{ choice }}"{% if choice == value %} selected{% endif %}>{{ choice }}</option>{% endfor %}</select>
+  {% elif f.kind == "list" %}<textarea name="{{ f.key }}" rows="3">{% if value is string %}{{ value }}{% else %}{{ value | join("\n") }}{% endif %}</textarea>
+  {% else %}<input name="{{ f.key }}" value="{{ value }}"{% if f.kind != "str" %} inputmode="decimal"{% endif %}>
+  {% endif %}
+  <small>{{ f.help }}</small>
+  <input type="hidden" name="_fields" value="{{ f.key }}">
+</label>
