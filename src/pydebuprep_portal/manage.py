@@ -96,7 +96,8 @@ def _create_token(session: Session, settings: Settings, args: argparse.Namespace
         session, kind=kind, name=args.name, actor="manage", expires_at=args.expires,
         team_id=team_id, host_name=args.host,
     )  # fmt: skip
-    print("Token created. Store it securely; it is shown only once.")
+    # stdout is the token alone, for scripts and $(…); the notice goes to stderr.
+    print("Token created. Store it securely; it is shown only once.", file=sys.stderr)
     print(plain)
     return 0
 

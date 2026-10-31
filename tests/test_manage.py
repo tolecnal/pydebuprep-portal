@@ -17,8 +17,10 @@ def test_manage_create_token_prints_it_once(
     db: Session, db_env: dict[str, str], capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert main(["create-token", "bootstrap"]) == 0
-    out = capsys.readouterr().out
-    assert out.count("\n") == 1
+    captured = capsys.readouterr()
+    out = captured.out
+    assert out.count("\n") == 1  # the token alone, for scripts
+    assert "shown only once" in captured.err
     token = authenticate(db, f"Bearer {out.strip()}", datetime.now(UTC))
     assert (token.kind, token.name, token.created_by, token.expires_at) == (
         "global",
