@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Audit log — pydebuprep portal{% endblock %}
+{% block main %}
+<h1>Audit log</h1>
+<form class="filters" method="get" action="/audit">
+  <label>Action starts with <input type="search" name="action" value="{{ action }}" placeholder="token."></label>
+  <button type="submit">Filter</button>
+</form>
+{% if entries %}
+<table>
+  <thead><tr><th>When</th><th>Who</th><th>Action</th><th>On</th><th>Details</th></tr></thead>
+  <tbody>
+  {% for entry in entries %}
+  <tr>
+    <td>{{ entry.at | utc }}</td>
+    <td>{{ entry.actor }}</td>
+    <td><code>{{ entry.action }}</code></td>
+    <td>{{ entry.target }}</td>
+    <td><code class="details">{{ entry.details | tojson }}</code></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if next_before %}
+<p class="more"><a href="/audit?{{ {'before': next_before, 'action': action} | urlencode_set }}">Older entries</a></p>
+{% endif %}
+{% else %}
+<p class="empty">Nothing recorded yet.</p>
+{% endif %}
+{% endblock %}

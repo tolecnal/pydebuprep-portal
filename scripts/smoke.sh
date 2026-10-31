@@ -27,7 +27,8 @@ PORTAL_OIDC_CLIENT_SECRET=unused
 ENV
 
 docker compose -p "$project" up -d --build --wait
-token=$(docker compose -p "$project" exec -T portal python -m pydebuprep_portal.manage create-token smoke)
+token=$(docker compose -p "$project" exec -T portal \
+  python -m pydebuprep_portal.manage create-token smoke --team smoke)
 
 cat > "$work/pydebuprep.conf" <<CONF
 upload:

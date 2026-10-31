@@ -20,6 +20,7 @@
     {% if viewer.reads_all or viewer.leads %}<a href="/queue">Queue</a>{% endif %}
     {% if viewer.reads_all %}<a href="/tokens">Tokens</a>{% endif %}
     {% if viewer.reads_all %}<a href="/settings">Settings</a>{% endif %}
+    {% if viewer.reads_all %}<a href="/audit">Audit log</a>{% endif %}
   </nav>
   <div class="who">
     <span class="name">{{ viewer.name }}</span>

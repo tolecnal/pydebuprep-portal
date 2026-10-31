@@ -23,8 +23,13 @@ def record(session: Session, actor: str, action: str, target: str, **details: ob
     )
 
 
-def list_audit(session: Session, *, before: int | None = None, limit: int = 50) -> list[AuditEntry]:
+def list_audit(
+    session: Session, *, action: str | None = None, before: int | None = None, limit: int = 50
+) -> list[AuditEntry]:
+    """Newest first; ACTION keeps the actions starting with it (`token.`, `host.map`)."""
     query = select(AuditEntry).order_by(AuditEntry.id.desc()).limit(limit)
+    if action:
+        query = query.where(AuditEntry.action.startswith(action, autoescape=True))
     if before is not None:
         query = query.where(AuditEntry.id < before)
     return list(session.scalars(query))

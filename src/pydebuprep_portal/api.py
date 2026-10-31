@@ -16,12 +16,13 @@ from pydebuprep_portal.access import (
     Viewer,
     may_change_settings,
     may_manage_tokens,
+    may_read_audit,
     may_read_tokens,
     may_see_queue_hosts,
     may_set_retention,
     may_set_visibility,
 )
-from pydebuprep_portal.audit import actor_of
+from pydebuprep_portal.audit import actor_of, list_audit
 from pydebuprep_portal.auth import api_viewer
 from pydebuprep_portal.db import get_session
 from pydebuprep_portal.ingest import IngestError, check_headers, read_body, store_report
@@ -611,3 +612,33 @@ def put_host_retention(
         raise HTTPException(404, "no such host")
     _set_retention(session, viewer, request, host=host)
     return request
+
+
+class AuditOut(BaseModel):
+    id: int
+    at: datetime
+    actor: str
+    action: str
+    target: str
+    details: dict[str, Any]
+
+
+class AuditList(BaseModel):
+    entries: list[AuditOut]
+    next_before: int | None
+
+
+@router.get("/audit", summary="The audit log, newest first (admins and auditors)")
+def audit_log(
+    viewer: ViewerDep, session: SessionDep, action: str | None = None, before: int | None = None
+) -> AuditList:
+    """`action` keeps the actions starting with it, e.g. `token.` or `host.map`."""
+    if not may_read_audit(viewer):
+        raise FORBIDDEN
+    entries, next_before = page_of(
+        list_audit(session, action=action, before=before, limit=PAGE_SIZE + 1), PAGE_SIZE
+    )
+    return AuditList(
+        entries=[AuditOut.model_validate(e, from_attributes=True) for e in entries],
+        next_before=next_before,
+    )

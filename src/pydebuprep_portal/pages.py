@@ -17,12 +17,13 @@ from pydebuprep_portal.access import (
     may_change_settings,
     may_delete_reports,
     may_manage_tokens,
+    may_read_audit,
     may_read_tokens,
     may_see_queue_hosts,
     may_set_retention,
     may_set_visibility,
 )
-from pydebuprep_portal.audit import actor_of
+from pydebuprep_portal.audit import actor_of, list_audit
 from pydebuprep_portal.auth import page_viewer
 from pydebuprep_portal.db import get_session
 from pydebuprep_portal.mapping import MappingError, map_host, queue, team_choices, unmap_host
@@ -524,6 +525,21 @@ def change_settings_page(
         message = str(exc) if "days" in str(exc) or "limit" in str(exc) else "use whole numbers"
         return _settings_page(request, viewer, session, 422, error=message)
     return RedirectResponse("/settings", status_code=303)
+
+
+@router.get("/audit", response_class=HTMLResponse)
+def audit_page(
+    request: Request, viewer: ViewerDep, session: SessionDep,
+    action: str = "", before: int | None = None,
+) -> HTMLResponse:  # fmt: skip
+    if not may_read_audit(viewer):
+        return _forbidden(request)
+    entries, next_before = page_of(
+        list_audit(session, action=action or None, before=before, limit=PAGE_SIZE + 1), PAGE_SIZE
+    )
+    return page(
+        request, "audit.html", viewer, entries=entries, next_before=next_before, action=action
+    )
 
 
 @router.get("/docs", response_class=HTMLResponse)
