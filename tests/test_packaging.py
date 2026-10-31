@@ -103,3 +103,14 @@ def test_readme_covers_configs() -> None:
     for topic in ("api/v1/configs", "--config https://", "version", "credentials_file",
                   "manage create-config"):  # fmt: skip
         assert topic in text, topic
+
+
+def test_the_old_upload_limit_variable_warns(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    for name, value in BASE_ENV.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("PORTAL_MAX_UPLOAD_BYTES", "1000")
+    with caplog.at_level("WARNING"):
+        from_environment()
+    assert "PORTAL_MAX_UPLOAD_BYTES is no longer read" in caplog.text

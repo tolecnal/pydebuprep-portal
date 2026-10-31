@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -71,4 +72,8 @@ def create_app(settings: Settings) -> FastAPI:
 
 def from_environment() -> FastAPI:
     """The app configured from PORTAL_* variables (uvicorn --factory)."""
+    if "PORTAL_MAX_UPLOAD_BYTES" in os.environ:
+        logging.getLogger(__name__).warning(
+            "PORTAL_MAX_UPLOAD_BYTES is no longer read: set the upload limit on the Settings page"
+        )
     return create_app(load_settings(os.environ))

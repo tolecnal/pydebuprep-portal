@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from pydebuprep_portal.audit import record
 from pydebuprep_portal.ingest import valid_host_name
-from pydebuprep_portal.models import TOKEN_KINDS, Token
+from pydebuprep_portal.models import TOKEN_KINDS, Team, Token
 
 # A prefix, not a secret.
 TOKEN_PREFIX = "pdp_"  # nosec B105
@@ -90,8 +90,10 @@ def create_token(
     )
     session.add(token)
     session.flush()
-    record(session, actor, "token.create", name, kind=kind, team_id=team_id,
-           host_name=host_name, public_id=public_id)  # fmt: skip
+    team = None if team_id is None else session.get(Team, team_id)
+    record(session, actor, "token.create", name, kind=kind,
+           team=team.name if team else None, host_name=host_name, public_id=public_id)  # fmt: skip
+
     session.commit()
     return token, f"{TOKEN_PREFIX}{public_id}_{secret}"
 
@@ -133,7 +135,7 @@ def revoke_token(
     if token.revoked_at is None:
         token.revoked_at = now
         record(session, actor, "token.revoke", token.name, kind=token.kind,
-               team_id=token.team_id, public_id=token.public_id)  # fmt: skip
+               team=token.team.name if token.team else None, public_id=token.public_id)  # fmt: skip
         session.commit()
     return True
 

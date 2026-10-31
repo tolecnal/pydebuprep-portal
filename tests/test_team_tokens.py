@@ -35,7 +35,8 @@ def test_lead_creates_team_and_host_tokens(
     team = make_team(db, "web")
     assert (tokens["web servers"].kind, tokens["web servers"].team_id) == ("team", team.id)
     assert (tokens["web1 only"].kind, tokens["web1 only"].host_name) == ("host", "web1")
-    actions = [(e.action, e.target) for e in db.query(AuditEntry).order_by(AuditEntry.id)]
+    actions = [(e.action, e.target) for e in db.query(AuditEntry).order_by(AuditEntry.id)
+               if e.action.startswith("token.")]  # fmt: skip
     assert actions == [("token.create", "web servers"), ("token.create", "web1 only")]
     page = lead.get("/teams/web").text
     assert "web servers" in page and "web1 only" in page

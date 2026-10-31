@@ -626,6 +626,8 @@ def put_team_retention(
 def put_host_retention(
     name: str, request: RetentionBody, viewer: ViewerDep, session: SessionDep
 ) -> RetentionBody:
+    if not may_set_retention(viewer):  # before the lookup: don't confirm host names
+        raise FORBIDDEN
     host = session.scalar(select(Host).where(Host.name == name.lower()))
     if host is None:
         raise HTTPException(404, "no such host")

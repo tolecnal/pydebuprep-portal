@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, func, select, update
+from sqlalchemy import CursorResult, case, func, select, update
 from sqlalchemy.orm import Session, aliased
 
 from pydebuprep_portal.access import Viewer, may_map, may_read_team, may_see_queue_hosts
 from pydebuprep_portal.audit import actor_of, record
-from pydebuprep_portal.models import Host, Report, Team
+from pydebuprep_portal.models import Host, Report, Team, Token
 from pydebuprep_portal.settings_store import get_settings
 from pydebuprep_portal.teams import get_team
 
@@ -106,12 +106,18 @@ def move_reports(session: Session, host: Host, team_id: int | None) -> int:
         .values(team_id=team_id)
     )
     moved = cast(CursorResult[Any], result).rowcount
-    if team_id is not None:  # a flag for the team the reports now belong to is moot
-        session.execute(
-            update(Report)
-            .where(Report.host_id == host.id, Report.token_team_id == team_id)
-            .values(token_team_id=None)
+    # A report is flagged when its token's team isn't the team it now belongs to.
+    token_team = select(Token.team_id).where(Token.id == Report.token_id).scalar_subquery()
+    session.execute(
+        update(Report)
+        .where(Report.host_id == host.id)
+        .values(
+            token_team_id=case(
+                (token_team.is_distinct_from(team_id) & token_team.is_not(None), token_team),
+                else_=None,
+            )
         )
+    )
     host.team_id = team_id
     return moved
 

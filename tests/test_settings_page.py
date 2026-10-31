@@ -172,3 +172,18 @@ def test_retention_of_an_unknown_team_is_404(signed_in: Callable[..., TestClient
         "/teams/nope/retention", data={"csrf_token": csrf_of(admin), "mode": "forever"}
     )
     assert resp.status_code == 404
+
+
+def test_host_retention_api_does_not_reveal_host_names(
+    signed_in: Callable[..., TestClient], bearer: Bearer, db: Session, add_report: AddReport
+) -> None:
+    add_report(hostname="secret-host")
+    member = signed_in("pydebuprep-team-web")
+    h = bearer("pydebuprep-team-web")
+    for name in ("secret-host", "nope"):
+        assert (
+            member.put(
+                f"/api/v1/hosts/{name}/retention", json={"days": 7, "forever": False}, headers=h
+            ).status_code
+            == 403
+        )
