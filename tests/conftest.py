@@ -70,3 +70,12 @@ def db(engine: Engine) -> Iterator[Session]:
         conn.execute(text(f"TRUNCATE {', '.join(TABLES)} RESTART IDENTITY CASCADE"))
     with make_sessionmaker(engine)() as session:
         yield session
+
+
+@pytest.fixture
+def db_env(db: Session, db_url: str, monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """The environment of a portal using the test database."""
+    env = BASE_ENV | {"PORTAL_DATABASE_URL": db_url}
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    return env
