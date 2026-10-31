@@ -37,7 +37,7 @@ def test_same_report_stored_meanwhile(
         calls += 1
         if calls == 1:  # another upload of the same report commits first
             with make_sessionmaker(engine)() as other:
-                original(other, **(kw | {"token_id": token.id}))
+                original(other, **(kw | {"token": other.get(Token, token.id)}))
         return original(*args, **kw)
 
     monkeypatch.setattr(ingest, "_insert", racing)

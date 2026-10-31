@@ -14,7 +14,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
-from pydebuprep_portal.models import Finding, Host, Report, Token
+from pydebuprep_portal.audit import record
+from pydebuprep_portal.models import Finding, Host, Report, Team, Token
 
 MAX_HOSTNAME = 253
 ENCODINGS = ("identity", "gzip")
@@ -124,6 +125,12 @@ def store_report(
     """Store an upload sent with TOKEN_ID; (report, True) if new, (the stored one, False)
     if sent before. Either way the token's last use is recorded."""
     data = parse(body)
+    token = session.get(Token, token_id)
+    if token is None:  # pragma: no cover - authenticated a moment ago
+        raise IngestError(401, "unknown upload token")
+    if token.kind == "host" and token.host_name != data.host.hostname.lower():
+        # Before the duplicate check: a host token can't resend another host's report.
+        raise IngestError(403, f"this token is for host {token.host_name} only")
     sha256 = hashlib.sha256(body).hexdigest()
     # Two tries: a concurrent upload may create the same report or the same host first.
     for _ in range(2):
@@ -134,7 +141,7 @@ def store_report(
             return existing, False
         try:
             report = _insert(
-                session, data=data, text=body.decode(), sha256=sha256, token_id=token_id, now=now
+                session, data=data, text=body.decode(), sha256=sha256, token=token, now=now
             )
         except IntegrityError:
             session.rollback()
@@ -144,18 +151,24 @@ def store_report(
 
 
 def _insert(
-    session: Session, *, data: ReportData, text: str, sha256: str, token_id: int, now: datetime
+    session: Session, *, data: ReportData, text: str, sha256: str, token: Token, now: datetime
 ) -> Report:
     name = data.host.hostname.lower()
-    host = session.scalar(select(Host).where(Host.name == name))
+    # Locked until this report is stored, so a host being mapped meanwhile can't leave
+    # the report behind in the queue: whoever locks the host second sees the first's work.
+    host = session.scalar(select(Host).where(Host.name == name).with_for_update())
     if host is None:
         host = Host(name=name, first_seen=now, last_seen=now)
         session.add(host)
+        session.flush()  # a host created concurrently fails here and is retried
     host.last_seen = now
+    team_id, token_team_id = _assign(session, host, token)
     summary = compute_summary(data.results)
     report = Report(
         host=host,
-        token_id=token_id,
+        token_id=token.id,
+        team_id=team_id,
+        token_team_id=token_team_id,
         sha256=sha256,
         generated_at=_when(data.generated_at),
         received_at=now,
@@ -178,9 +191,25 @@ def _insert(
                 Finding(check_id=result.id, severity=finding.severity.value, title=finding.title)
             )
     session.add(report)
-    _used(session, token_id, now)
+    _used(session, token.id, now)
     session.commit()
     return report
+
+
+def _assign(session: Session, host: Host, token: Token) -> tuple[int | None, int | None]:
+    """(team, flag) of a new report of HOST sent with TOKEN. A mapped host's reports go to
+    its team, flagged when another team's token sent them; an unmapped host is mapped to
+    a team or host token's team at once; with a global token it stays in the queue."""
+    if host.team_id is not None:
+        foreign = token.team_id is not None and token.team_id != host.team_id
+        return host.team_id, token.team_id if foreign else None
+    if token.team_id is not None:
+        host.team_id = token.team_id
+        team = session.get(Team, token.team_id)
+        record(session, f"token {token.name}", "host.map", host.name,
+               team=team.name if team else None, how="first upload")  # fmt: skip
+        return token.team_id, None
+    return None, None
 
 
 def _used(session: Session, token_id: int, now: datetime) -> None:
