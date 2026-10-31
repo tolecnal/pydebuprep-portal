@@ -9,6 +9,7 @@ dist/
 .ruff_cache/
 .coverage
 .env
+.audit/
 
 # Local planning notes (superpowers skills); not part of the project
 .superpowers/

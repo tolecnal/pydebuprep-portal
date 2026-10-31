@@ -114,3 +114,13 @@ def test_the_old_upload_limit_variable_warns(
     with caplog.at_level("WARNING"):
         from_environment()
     assert "PORTAL_MAX_UPLOAD_BYTES is no longer read" in caplog.text
+
+
+def test_security_workflows() -> None:
+    security = yaml.safe_load((ROOT / ".github/workflows/security.yml").read_text())
+    names = {job["name"] for job in security["jobs"].values()}
+    assert {"Bandit (Python security lint)", "ShellCheck", "Known vulnerabilities in Python dependencies",
+            "zizmor (GitHub Actions security)", "Dependency review"} <= names  # fmt: skip
+    codeql = yaml.safe_load((ROOT / ".github/workflows/codeql.yml").read_text())
+    assert codeql["jobs"]["analyze"]["strategy"]["matrix"]["language"] == ["python", "actions"]
+    assert "make audit" in (ROOT / ".github/workflows/security.yml").read_text()
