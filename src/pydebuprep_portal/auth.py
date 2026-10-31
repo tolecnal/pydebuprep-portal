@@ -48,7 +48,7 @@ def make_oauth(settings: Settings) -> OAuth:
         name="oidc",
         client_id=settings.oidc_client_id,
         client_secret=settings.oidc_client_secret,
-        server_metadata_url=f"{settings.oidc_issuer}/.well-known/openid-configuration",
+        server_metadata_url=settings.oidc_metadata_url,
         client_kwargs={"scope": "openid profile email"},
     )
     return oauth

@@ -97,3 +97,13 @@ def test_allow_http_values(value: str, expected: bool) -> None:
 def test_bad_allow_http_value() -> None:
     with pytest.raises(SettingsError, match="PORTAL_ALLOW_HTTP"):
         load_settings(BASE_ENV | {"PORTAL_ALLOW_HTTP": "maybe"})
+
+
+def test_metadata_url_defaults_to_the_issuers() -> None:
+    s = load_settings(BASE_ENV)
+    assert s.oidc_metadata_url == "https://idp.test/realms/r/.well-known/openid-configuration"
+    internal = "http://keycloak:8080/realms/r/.well-known/openid-configuration"
+    assert (
+        load_settings(BASE_ENV | {"PORTAL_OIDC_METADATA_URL": internal}).oidc_metadata_url
+        == internal
+    )

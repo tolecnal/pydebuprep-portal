@@ -233,3 +233,12 @@ def test_an_id_token_is_not_an_api_token(oidc_client: TestClient, stub: OIDCStub
         oidc_client.get("/api/v1/whoami", headers={"Authorization": f"Bearer {token}"}).status_code
         == 200
     )
+
+
+def test_metadata_from_an_internal_url(make_client, stub: OIDCStub) -> None:  # type: ignore[no-untyped-def]
+    # The provider's public issuer isn't reachable from here; its metadata URL is.
+    client = make_client(
+        PORTAL_OIDC_ISSUER="https://login.example.invalid/realms/test",
+        PORTAL_OIDC_METADATA_URL=f"{stub.issuer}/.well-known/openid-configuration",
+    )
+    assert client.get("/login", follow_redirects=False).status_code == 302

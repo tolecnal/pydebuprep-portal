@@ -124,3 +124,27 @@ def test_security_workflows() -> None:
     codeql = yaml.safe_load((ROOT / ".github/workflows/codeql.yml").read_text())
     assert codeql["jobs"]["analyze"]["strategy"]["matrix"]["language"] == ["python", "actions"]
     assert "make audit" in (ROOT / ".github/workflows/security.yml").read_text()
+
+
+def test_preview_compose_and_realm() -> None:
+    import json
+
+    dev = yaml.safe_load((ROOT / "compose.preview.yaml").read_text())
+    assert set(dev["services"]) >= {"keycloak", "portal"}
+    env = dev["services"]["portal"]["environment"]
+    assert env["PORTAL_OIDC_METADATA_URL"].startswith("http://keycloak:8080/")
+    realm = json.loads((ROOT / "preview/realm.json").read_text())
+    groups = {g["name"] for g in realm["groups"]}
+    assert {
+        "pydebuprep-admins",
+        "pydebuprep-auditors",
+        "pydebuprep-team-web",
+        "pydebuprep-team-web-lead",
+    } <= groups
+    users = {u["username"] for u in realm["users"]}
+    assert {"admin", "lead", "member", "auditor"} <= users
+    (client,) = [c for c in realm["clients"] if c["clientId"] == "pydebuprep-portal"]
+    mappers = {m["protocolMapper"] for m in client["protocolMappers"]}
+    assert {"oidc-group-membership-mapper", "oidc-audience-mapper"} <= mappers
+    assert "preview:" in (ROOT / "Makefile").read_text()
+    assert "make preview" in (ROOT / "README.md").read_text()

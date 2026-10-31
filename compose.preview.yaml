@@ -1,0 +1,43 @@
+# A local preview with a ready-made Keycloak: `make preview`, then open
+# http://localhost:8400 and sign in as admin, lead, member or auditor (password = name).
+# For trying the portal out only: every secret here is public.
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # Browsers reach Keycloak at localhost:8480; the portal, at keycloak:8080.
+      KC_HOSTNAME: http://localhost:8480
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./preview/realm.json:/opt/keycloak/data/import/realm.json:ro
+    ports:
+      - "127.0.0.1:8480:8080"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q UP <&3
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  portal:
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      PORTAL_BASE_URL: http://localhost:8400
+      PORTAL_ALLOW_HTTP: "1"
+      PORTAL_SESSION_SECRET: preview-only-session-secret-0123456789abcdef
+      PORTAL_OIDC_ISSUER: http://localhost:8480/realms/pydebuprep
+      PORTAL_OIDC_METADATA_URL: http://keycloak:8080/realms/pydebuprep/.well-known/openid-configuration
+      PORTAL_OIDC_CLIENT_ID: pydebuprep-portal
+      PORTAL_OIDC_CLIENT_SECRET: preview-only-client-secret
+      # Authlib refuses plain-HTTP token endpoints unless told otherwise.
+      AUTHLIB_INSECURE_TRANSPORT: "1"

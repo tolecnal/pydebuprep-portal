@@ -25,6 +25,7 @@ class Settings:
     oidc_client_id: str
     oidc_client_secret: str
     oidc_audience: str
+    oidc_metadata_url: str = ""  # where the provider's metadata is read; default: the issuer's
     oidc_groups_claim: str = "groups"
     group_prefix: str = "pydebuprep-"
     allow_http: bool = False
@@ -47,6 +48,8 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         oidc_client_id=client_id,
         oidc_client_secret=_secret(env, "PORTAL_OIDC_CLIENT_SECRET"),
         oidc_audience=env.get("PORTAL_OIDC_AUDIENCE") or client_id,
+        oidc_metadata_url=env.get("PORTAL_OIDC_METADATA_URL")
+        or f"{_required(env, 'PORTAL_OIDC_ISSUER').rstrip('/')}/.well-known/openid-configuration",
         oidc_groups_claim=env.get("PORTAL_OIDC_GROUPS_CLAIM") or "groups",
         group_prefix=env.get("PORTAL_GROUP_PREFIX") or "pydebuprep-",
         allow_http=allow_http,

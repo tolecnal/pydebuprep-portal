@@ -3,7 +3,7 @@ PIP_AUDIT ?= pip-audit
 DB_CONTAINER ?= pydebuprep-portal-testdb
 TEST_DB_URL ?= postgresql+psycopg://portal_test:portal_test@127.0.0.1:55432/portal_test
 
-.PHONY: venv lock lint test audit db-up db-down image
+.PHONY: venv lock lint test audit db-up db-down image preview preview-down
 
 venv:
 	python3 -m venv .venv
@@ -47,3 +47,18 @@ db-down:
 
 image:
 	docker build -t pydebuprep-portal .
+
+# A local preview: the portal with a ready-made Keycloak and demo data.
+PREVIEW = POSTGRES_PASSWORD=preview PORTAL_ENV_FILE=preview/preview.env PORTAL_PORT=8400 \
+  docker compose -p pydebuprep-preview -f compose.yaml -f compose.preview.yaml
+
+preview:
+	$(PREVIEW) up -d --build --wait
+	$(PREVIEW) exec -T portal python -m pydebuprep_portal.manage demo-data || true
+	@echo
+	@echo "The portal: http://localhost:8400"
+	@echo "Sign in as admin, lead, member or auditor; the password is the name."
+	@echo "Keycloak's console: http://localhost:8480 (admin/admin). Stop with: make preview-down"
+
+preview-down:
+	$(PREVIEW) down -v

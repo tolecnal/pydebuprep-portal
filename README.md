@@ -11,6 +11,20 @@ pydebuprep works without the portal. A host uses it only when its config says so
 > teams and roles, global, team and host tokens, the unassigned queue, retention, the
 > audit log, and configs that hosts fetch with `pydebuprep --config https://…`.
 
+## Preview it locally
+
+With Docker, `make preview` builds the portal and starts it with PostgreSQL and a
+ready-made Keycloak, then fills it with demo teams, hosts and a few weeks of reports:
+
+```sh
+make preview        # then open http://localhost:8400
+make preview-down   # stop it and delete its data
+```
+
+Sign in as `admin`, `lead` (lead of team web), `member` (of team web) or `auditor`;
+each password is the user name. Every secret in `compose.preview.yaml` is public: it is
+for trying the portal out, never for real reports.
+
 ## Running it
 
 The portal runs as a Docker image (Debian 13, `debian:trixie-slim`) next to PostgreSQL,
