@@ -11,11 +11,17 @@ from pydebuprep.render import FORMATS
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from pydebuprep_portal.access import Viewer, may_manage_tokens, may_read_tokens
+from pydebuprep_portal.access import (
+    Viewer,
+    may_manage_tokens,
+    may_read_tokens,
+    may_see_queue_hosts,
+)
 from pydebuprep_portal.audit import actor_of
 from pydebuprep_portal.auth import api_viewer
 from pydebuprep_portal.db import get_session
 from pydebuprep_portal.ingest import IngestError, check_headers, read_body, store_report
+from pydebuprep_portal.mapping import MappingError, map_host, queue, unmap_host
 from pydebuprep_portal.models import Team, Token
 from pydebuprep_portal.queries import (
     ReportRow,
@@ -407,4 +413,60 @@ def delete_team_token(name: str, token_id: int, viewer: ViewerDep, session: Sess
         raise FORBIDDEN
     if not revoke_token(session, token_id, datetime.now(UTC), actor_of(viewer), team.id):
         raise HTTPException(404, "no such token in this team")
+    return Response(status_code=204)
+
+
+class QueuedHostOut(BaseModel):
+    name: str
+    os: str
+    first_seen: datetime
+    last_seen: datetime
+    reports: int
+    worst: str
+
+
+class QueueOut(BaseModel):
+    hosts: list[QueuedHostOut]
+
+
+class MapRequest(BaseModel):
+    team: str
+
+
+class Mapped(BaseModel):
+    host: str
+    team: str | None
+    reports_moved: int
+
+
+def _mapping_error(exc: MappingError) -> HTTPException:
+    return HTTPException(exc.status, exc.detail)
+
+
+@router.get("/queue", summary="Unmapped hosts (admins, auditors, leads)")
+def unassigned_queue(viewer: ViewerDep, session: SessionDep) -> QueueOut:
+    """Leads see the host names, to map them; reading the queued reports needs an admin
+    or auditor."""
+    if not may_see_queue_hosts(viewer):
+        raise FORBIDDEN
+    return QueueOut(hosts=[QueuedHostOut(**h.__dict__) for h in queue(session, viewer)])
+
+
+@router.put("/hosts/{name}/team", summary="Map a host to a team, moving its reports")
+def put_host_team(name: str, request: MapRequest, viewer: ViewerDep, session: SessionDep) -> Mapped:
+    try:
+        moved = map_host(session, viewer, name, request.team)
+    except MappingError as exc:
+        raise _mapping_error(exc) from None
+    return Mapped(host=name.lower(), team=request.team, reports_moved=moved)
+
+
+@router.delete(
+    "/hosts/{name}/team", status_code=204, summary="Send a host back to the queue (admins)"
+)
+def delete_host_team(name: str, viewer: ViewerDep, session: SessionDep) -> Response:
+    try:
+        unmap_host(session, viewer, name)
+    except MappingError as exc:
+        raise _mapping_error(exc) from None
     return Response(status_code=204)

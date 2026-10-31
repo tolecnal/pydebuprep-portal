@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Unassigned — pydebuprep portal{% endblock %}
+{% block main %}
+<h1>Unassigned hosts</h1>
+<p class="empty">Hosts that reported with a global token and belong to no team yet. Mapping a host moves its reports to the team.</p>
+{% if hosts %}
+<table>
+  <thead><tr><th>Host</th><th>OS</th><th>First seen</th><th>Last seen</th><th>Reports</th><th>Worst</th>{% if team_choices %}<th>Map to</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for host in hosts %}
+  <tr>
+    <td>{% if viewer.reads_all %}<a href="/hosts/{{ host.name }}">{{ host.name }}</a>{% else %}{{ host.name }}{% endif %}</td>
+    <td>{{ host.os }}</td>
+    <td>{{ host.first_seen | utc }}</td>
+    <td>{{ host.last_seen | utc }}</td>
+    <td class="num">{{ host.reports }}</td>
+    <td><span class="sev sev-{{ host.worst }}">{{ host.worst }}</span></td>
+    {% if team_choices %}<td>
+      <form method="post" action="/queue/{{ host.name }}/map" class="inline">
+        <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+        <select name="team">{% for name in team_choices %}<option value="{{ name }}">{{ name }}</option>{% endfor %}</select>
+        <button type="submit">Map</button>
+      </form>
+    </td>{% endif %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No unassigned hosts.</p>
+{% endif %}
+{% endblock %}

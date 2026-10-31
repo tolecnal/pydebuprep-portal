@@ -9,13 +9,15 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydebuprep.checks import ALL_CHECKS
 from pydebuprep.render import FORMATS
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from pydebuprep_portal.access import Viewer, may_manage_tokens, may_read_tokens
+from pydebuprep_portal.access import Viewer, may_manage_tokens, may_read_tokens, may_see_queue_hosts
 from pydebuprep_portal.audit import actor_of
 from pydebuprep_portal.auth import page_viewer
 from pydebuprep_portal.db import get_session
-from pydebuprep_portal.models import Team
+from pydebuprep_portal.mapping import MappingError, map_host, queue, team_choices, unmap_host
+from pydebuprep_portal.models import Host, Team
 from pydebuprep_portal.queries import (
     get_report,
     host_timeline,
@@ -133,7 +135,59 @@ def host_page(request: Request, name: str, viewer: ViewerDep, session: SessionDe
     rows = host_timeline(session, viewer, name)
     if rows is None:
         return error_page(request, 404, "Not found", "There is no such host, or you can't see it.")
-    return page(request, "host.html", viewer, host=name.lower(), rows=rows)
+    host = session.scalar(select(Host).where(Host.name == name.lower()))
+    choices = team_choices(session, viewer) if viewer.is_admin else []
+    return page(
+        request, "host.html", viewer, host=name.lower(), rows=rows,
+        team=host.team.name if host and host.team else None, team_choices=choices,
+    )  # fmt: skip
+
+
+@router.post("/hosts/{name}/map", dependencies=[Depends(require_csrf)])
+def map_host_page(
+    request: Request, name: str, viewer: ViewerDep, session: SessionDep,
+    team: Annotated[str, Form()] = "",
+) -> Response:  # fmt: skip
+    return _map(request, session, viewer, name, team, f"/hosts/{name.lower()}")
+
+
+@router.post("/hosts/{name}/unmap", dependencies=[Depends(require_csrf)])
+def unmap_host_page(
+    request: Request, name: str, viewer: ViewerDep, session: SessionDep
+) -> Response:
+    try:
+        unmap_host(session, viewer, name)
+    except MappingError as exc:
+        return error_page(request, exc.status, "Not done", exc.detail)
+    return RedirectResponse(f"/hosts/{name.lower()}", status_code=303)
+
+
+def _map(
+    request: Request, session: Session, viewer: Viewer, host: str, team: str, back: str
+) -> Response:
+    try:
+        map_host(session, viewer, host, team)
+    except MappingError as exc:
+        return error_page(request, exc.status, "Not done", exc.detail)
+    return RedirectResponse(back, status_code=303)
+
+
+@router.get("/queue", response_class=HTMLResponse)
+def queue_page(request: Request, viewer: ViewerDep, session: SessionDep) -> HTMLResponse:
+    if not may_see_queue_hosts(viewer):
+        return _forbidden(request)
+    return page(
+        request, "queue.html", viewer, hosts=queue(session, viewer),
+        team_choices=team_choices(session, viewer),
+    )  # fmt: skip
+
+
+@router.post("/queue/{host}/map", dependencies=[Depends(require_csrf)])
+def map_queued_host(
+    request: Request, host: str, viewer: ViewerDep, session: SessionDep,
+    team: Annotated[str, Form()] = "",
+) -> Response:  # fmt: skip
+    return _map(request, session, viewer, host, team, "/queue")
 
 
 SEARCH_FIELDS = ("host", "check", "severity", "words")

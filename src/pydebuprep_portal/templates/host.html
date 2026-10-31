@@ -2,6 +2,22 @@
 {% block title %}{{ host }} — pydebuprep portal{% endblock %}
 {% block main %}
 <h1>{{ host }}</h1>
+<p>Team: {% if team %}<a href="/teams/{{ team }}">{{ team }}</a>{% else %}unassigned{% endif %}</p>
+{% if team_choices %}
+<form class="filters" method="post" action="/hosts/{{ host }}/map">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <label>{% if team %}Move to{% else %}Map to{% endif %}
+    <select name="team">{% for name in team_choices %}<option value="{{ name }}"{% if name == team %} selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+  </label>
+  <button type="submit">{% if team %}Move the host and all its reports{% else %}Map{% endif %}</button>
+</form>
+{% if team %}
+<form method="post" action="/hosts/{{ host }}/unmap" class="inline">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <button type="submit">Back to the unassigned queue</button>
+</form>
+{% endif %}
+{% endif %}
 <p class="empty">Reports oldest first. A change of OS or kernel between reports that shouldn't be there may mean two machines report the same host name.</p>
 <table>
   <thead><tr><th>Report</th><th>Generated</th><th>Worst</th><th>Critical</th><th>Warning</th>
