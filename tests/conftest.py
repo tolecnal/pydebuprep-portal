@@ -57,7 +57,7 @@ def client() -> Iterator[TestClient]:
 
 # --- database ---------------------------------------------------------------------
 
-TABLES = ("hosts", "tokens", "reports", "findings", "teams", "audit_log")
+TABLES = ("hosts", "tokens", "reports", "findings", "teams", "audit_log", "configs")
 
 
 @pytest.fixture(scope="session")
