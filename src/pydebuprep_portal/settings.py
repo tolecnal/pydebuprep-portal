@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
-DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MIN_SESSION_SECRET = 32
 TRUE = frozenset({"1", "true", "yes", "on"})
 FALSE = frozenset({"", "0", "false", "no", "off"})
@@ -28,7 +27,6 @@ class Settings:
     oidc_audience: str
     oidc_groups_claim: str = "groups"
     group_prefix: str = "pydebuprep-"
-    max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES
     allow_http: bool = False
 
 
@@ -51,7 +49,6 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         oidc_audience=env.get("PORTAL_OIDC_AUDIENCE") or client_id,
         oidc_groups_claim=env.get("PORTAL_OIDC_GROUPS_CLAIM") or "groups",
         group_prefix=env.get("PORTAL_GROUP_PREFIX") or "pydebuprep-",
-        max_upload_bytes=_positive_int(env, "PORTAL_MAX_UPLOAD_BYTES", DEFAULT_MAX_UPLOAD_BYTES),
         allow_http=allow_http,
     )
 
@@ -83,19 +80,6 @@ def _base_url(value: str, allow_http: bool) -> str:
     if parts.scheme == "http" and not allow_http:
         raise SettingsError("PORTAL_BASE_URL must use https:// (http:// needs PORTAL_ALLOW_HTTP=1)")
     return value.rstrip("/")
-
-
-def _positive_int(env: Mapping[str, str], name: str, default: int) -> int:
-    value = env.get(name, "")
-    if not value:
-        return default
-    try:
-        number = int(value)
-    except ValueError:
-        number = 0
-    if number <= 0:
-        raise SettingsError(f"{name} must be a positive number of bytes, not {value!r}")
-    return number
 
 
 def _bool(env: Mapping[str, str], name: str) -> bool:

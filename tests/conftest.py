@@ -57,7 +57,7 @@ def client() -> Iterator[TestClient]:
 
 # --- database ---------------------------------------------------------------------
 
-TABLES = ("hosts", "tokens", "reports", "findings")
+TABLES = ("hosts", "tokens", "reports", "findings", "teams", "audit_log")
 
 
 @pytest.fixture(scope="session")
@@ -83,6 +83,12 @@ def engine(db_url: str) -> Iterator[Engine]:
 def db(engine: Engine) -> Iterator[Session]:
     with engine.begin() as conn:
         conn.execute(text(f"TRUNCATE {', '.join(TABLES)} RESTART IDENTITY CASCADE"))
+        conn.execute(
+            text(
+                "UPDATE settings SET retention_days = 365, only_admins_map = false, "
+                "max_upload_bytes = 10485760"
+            )
+        )
     with make_sessionmaker(engine)() as session:
         yield session
 
@@ -226,3 +232,11 @@ def bearer(stub: OIDCStub) -> Callable[..., dict[str, str]]:
         return {"Authorization": f"Bearer {stub.access_token(groups=list(groups))}"}
 
     return headers
+
+
+def set_upload_limit(db: Session, limit: int) -> None:
+    from pydebuprep_portal.settings_store import get_settings, update_settings
+
+    current = get_settings(db)
+    update_settings(db, "test", retention_days=current.retention_days,
+                    only_admins_map=current.only_admins_map, max_upload_bytes=limit)  # fmt: skip

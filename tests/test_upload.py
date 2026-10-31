@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from conftest import set_upload_limit
 from pydebuprep_portal.models import Finding, Host, Report
 from sample import sample_json
 
@@ -139,15 +140,19 @@ def test_broken_gzip_is_400(api: TestClient, token: str) -> None:
         assert post(api, token, body, **{"Content-Encoding": "gzip"}).status_code == 400
 
 
-def test_oversize_plain_body_is_413(make_client: Callable[..., TestClient], token: str) -> None:
-    client = make_client(PORTAL_MAX_UPLOAD_BYTES="1000")
+def test_oversize_plain_body_is_413(
+    make_client: Callable[..., TestClient], token: str, db: Session
+) -> None:
+    set_upload_limit(db, 1024)
+    client = make_client()
     assert post(client, token, b"{" + b" " * 2000 + b"}").status_code == 413
 
 
 def test_gzip_bomb_is_413_without_inflating_it(
-    make_client: Callable[..., TestClient], token: str
+    make_client: Callable[..., TestClient], token: str, db: Session
 ) -> None:
-    client = make_client(PORTAL_MAX_UPLOAD_BYTES="1000000")
+    set_upload_limit(db, 1000000)
+    client = make_client()
     bomb = gzip.compress(b"{" + b" " * 100_000_000 + b"}")
     tracemalloc.start()
     try:
@@ -160,9 +165,10 @@ def test_gzip_bomb_is_413_without_inflating_it(
 
 
 def test_chunked_body_without_length_is_limited(
-    make_client: Callable[..., TestClient], token: str
+    make_client: Callable[..., TestClient], token: str, db: Session
 ) -> None:
-    client = make_client(PORTAL_MAX_UPLOAD_BYTES="1000")
+    set_upload_limit(db, 1024)
+    client = make_client()
 
     def chunks() -> Iterator[bytes]:
         for _ in range(100):
@@ -174,9 +180,10 @@ def test_chunked_body_without_length_is_limited(
 
 
 def test_declared_length_over_the_limit_is_413_before_reading(
-    make_client: Callable[..., TestClient], token: str
+    make_client: Callable[..., TestClient], token: str, db: Session
 ) -> None:
-    client = make_client(PORTAL_MAX_UPLOAD_BYTES="1000")
+    set_upload_limit(db, 1024)
+    client = make_client()
     assert (
         post(client, token, b"{" + b" " * 5000 + b"}", **{"Content-Length": "5002"}).status_code
         == 413
