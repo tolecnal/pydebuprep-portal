@@ -9,6 +9,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -23,8 +24,11 @@ from sqlalchemy.orm import Session
 from oidc_stub import OIDCStub
 from pydebuprep_portal.app import create_app
 from pydebuprep_portal.db import make_engine, make_sessionmaker, migrations_config
+from pydebuprep_portal.ingest import store_report
+from pydebuprep_portal.models import Report
 from pydebuprep_portal.settings import Settings, load_settings
 from pydebuprep_portal.tokens import create_token
+from sample import sample_json
 
 SECRET = "s" * 32
 
@@ -177,3 +181,48 @@ def csrf_of(client: TestClient) -> str:
     match = re.search(r'name="csrf_token" value="([^"]+)"', client.get("/").text)
     assert match, "no CSRF token on the page"
     return match.group(1)
+
+
+# --- stored reports and people ------------------------------------------------------
+
+
+@pytest.fixture
+def add_report(db: Session) -> Callable[..., Report]:
+    """Store a sample report (keyword arguments as for sample.sample_json)."""
+    stored_token = create_token(db, kind="global", name="fixture", created_by="test",
+                                expires_at=None)[0]  # fmt: skip
+    received = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
+
+    def add(**kw: Any) -> Report:
+        nonlocal received
+        received += timedelta(minutes=1)
+        return store_report(db, sample_json(**kw).encode(), stored_token, received)[0]
+
+    return add
+
+
+@pytest.fixture
+def signed_in(make_client: Callable[..., TestClient], stub: OIDCStub) -> Callable[..., TestClient]:
+    """A client signed in with the given groups."""
+
+    def sign_in(*groups: str) -> TestClient:
+        client = make_client(PORTAL_OIDC_ISSUER=stub.issuer)
+        assert login(client, stub, groups=list(groups)).status_code == 303
+        return client
+
+    return sign_in
+
+
+@pytest.fixture
+def admin(signed_in: Callable[..., TestClient]) -> TestClient:
+    return signed_in("pydebuprep-admins")
+
+
+@pytest.fixture
+def bearer(stub: OIDCStub) -> Callable[..., dict[str, str]]:
+    """Authorization headers with an OIDC access token for the given groups."""
+
+    def headers(*groups: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {stub.access_token(groups=list(groups))}"}
+
+    return headers

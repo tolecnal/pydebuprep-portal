@@ -48,3 +48,7 @@ async def require_csrf(request: Request) -> None:
         sent, expected
     ):
         raise HTTPException(403, "the form expired; reload the page and try again")
+
+
+# Swagger UI sets inline styles on its elements; its scripts are all served by the portal.
+DOCS_CSP = PAGE_CSP.replace("style-src 'self'", "style-src 'self' 'unsafe-inline'")

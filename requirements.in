@@ -11,4 +11,3 @@ httpx
 itsdangerous
 jinja2
 python-multipart
-swagger-ui-bundle

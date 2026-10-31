@@ -27,7 +27,13 @@ def create_app(settings: Settings) -> FastAPI:
         yield
         engine.dispose()
 
-    app = FastAPI(title="pydebuprep portal", version=__version__, lifespan=lifespan)
+    app = FastAPI(
+        title="pydebuprep portal",
+        version=__version__,
+        lifespan=lifespan,
+        docs_url=None,  # served by pages.docs from the portal's own files
+        redoc_url=None,
+    )
     app.state.settings = settings
     app.state.sessionmaker = make_sessionmaker(engine)
     app.state.oauth = auth.make_oauth(settings)

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>Reports</h1>
+<form class="filters" method="get" action="/" hx-get="/" hx-target="#rows" hx-trigger="change" hx-push-url="true">
+  <label>Worst
+    <select name="worst">
+      <option value="">any</option>
+      {% for level in ["critical", "warning", "info", "ok"] %}
+      <option value="{{ level }}"{% if worst == level %} selected{% endif %}>{{ level }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+</form>
+<div id="rows">
+{% include "_report_rows.html" %}
+</div>
+{% endblock %}

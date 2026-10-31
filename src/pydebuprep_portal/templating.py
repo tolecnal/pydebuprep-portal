@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse
@@ -13,6 +15,19 @@ from pydebuprep_portal.access import Viewer
 from pydebuprep_portal.security import CSRF_FIELD, csrf_token
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+
+
+def _utc(moment: datetime) -> str:
+    return moment.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _urlencode_set(params: dict[str, Any]) -> str:
+    """Query string of the parameters that are set."""
+    return urlencode({k: v for k, v in params.items() if v not in (None, "")})
+
+
+templates.env.filters["utc"] = _utc
+templates.env.filters["urlencode_set"] = _urlencode_set
 
 
 def page(

@@ -4,13 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}pydebuprep portal{% endblock %}</title>
+<meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false}'>
 <link rel="stylesheet" href="/static/portal.css">
+<script src="/static/htmx.min.js" defer></script>
 </head>
 <body>
 <header class="top">
   <a class="brand" href="/">pydebuprep portal</a>
   {% if viewer %}
-  <nav>{% block nav %}{% endblock %}</nav>
+  <nav>
+    <a href="/">Reports</a>
+  </nav>
   <div class="who">
     <span class="name">{{ viewer.name }}</span>
     {% for role in viewer.roles | sort %}<span class="role">{{ role }}</span>{% endfor %}

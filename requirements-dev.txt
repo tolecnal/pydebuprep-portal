@@ -538,9 +538,7 @@ itsdangerous==2.2.0 \
 jinja2==3.1.6 \
     --hash=sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d \
     --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
-    # via
-    #   -r requirements.in
-    #   swagger-ui-bundle
+    # via -r requirements.in
 joserfc==1.7.7 \
     --hash=sha256:06979cfbab78bc802f14c0358f32969826cc26720e13cb38926ffdc86bc0cb2c \
     --hash=sha256:471d0fd12a5a0d1c0942de280f39efe6f597878315033270b504d4d006d25510
@@ -1363,10 +1361,6 @@ stevedore==5.9.1 \
     --hash=sha256:5c8ff3a9f336cc1a06ac0f597bc79d11a2f950bfd32e290ca56b5a301fafafbf \
     --hash=sha256:e97a2667923efda926e8713fde6a73616df68210a3cbc6f02b48967b676fd8bf
     # via bandit
-swagger-ui-bundle==1.1.0 \
-    --hash=sha256:20673c3431c8733d5d1615ecf79d9acf30cff75202acaf21a7d9c7f489714529 \
-    --hash=sha256:f7526f7bb99923e10594c54247265839bec97e96b0438561ac86faf40d40dd57
-    # via -r requirements.in
 types-authlib==1.8.0.20260911 \
     --hash=sha256:0617c4a2361a605144bae0850f70c18edd5265abec11af66235a02a1b415444e \
     --hash=sha256:cde5e55bca5e908438facc8fc701197bf540af880dff7b8ca8cf40a08258a62a

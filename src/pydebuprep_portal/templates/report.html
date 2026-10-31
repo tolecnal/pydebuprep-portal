@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ report.host.name }} #{{ report.id }} — pydebuprep portal{% endblock %}
+{% block main %}
+<h1>{{ report.host.name }} <span class="sev sev-{{ report.worst }}">{{ report.worst }}</span></h1>
+{% if report.config_stale %}
+<p class="notice">This report ran with a saved copy of its config: it may not be the latest.</p>
+{% endif %}
+<dl class="facts">
+  <dt>Generated</dt><dd>{{ report.generated_at | utc }}</dd>
+  <dt>Received</dt><dd>{{ report.received_at | utc }}</dd>
+  <dt>OS</dt><dd>{{ report.os_id }} {{ report.os_version }} ({{ report.codename }})</dd>
+  <dt>Kernel</dt><dd>{{ report.kernel }}</dd>
+  <dt>Findings</dt><dd>{{ report.critical }} critical, {{ report.warning }} warning, {{ report.info }} info; {{ report.error }} checks failed to run</dd>
+  <dt>pydebuprep</dt><dd>{{ report.tool_version }}</dd>
+  <dt>Sent with</dt><dd>{{ report.token.name }}</dd>
+</dl>
+<p class="downloads">Download:
+{% for fmt in formats %}<a href="/reports/{{ report.id }}/download/{{ fmt }}">{{ fmt }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+</p>
+<iframe sandbox="" src="/reports/{{ report.id }}/html" title="The report" class="report"></iframe>
+{% endblock %}
