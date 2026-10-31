@@ -49,16 +49,21 @@ image:
 	docker build -t pydebuprep-portal .
 
 # A local preview: the portal with a ready-made Keycloak and demo data.
+# PREVIEW_HOST: the name or address browsers use; anything but localhost publishes the
+# ports on every interface (for a headless machine).
+PREVIEW_HOST ?= localhost
+PREVIEW_BIND = $(if $(filter localhost,$(PREVIEW_HOST)),127.0.0.1,0.0.0.0)
 PREVIEW = POSTGRES_PASSWORD=preview PORTAL_ENV_FILE=preview/preview.env PORTAL_PORT=8400 \
+  PORTAL_BIND=$(PREVIEW_BIND) PREVIEW_HOST=$(PREVIEW_HOST) \
   docker compose -p pydebuprep-preview -f compose.yaml -f compose.preview.yaml
 
 preview:
 	$(PREVIEW) up -d --build --wait
 	$(PREVIEW) exec -T portal python -m pydebuprep_portal.manage demo-data || true
 	@echo
-	@echo "The portal: http://localhost:8400"
+	@echo "The portal: http://$(PREVIEW_HOST):8400"
 	@echo "Sign in as admin, lead, member or auditor; the password is the name."
-	@echo "Keycloak's console: http://localhost:8480 (admin/admin). Stop with: make preview-down"
+	@echo "Keycloak's console: http://$(PREVIEW_HOST):8480 (admin/admin). Stop with: make preview-down"
 
 preview-down:
 	$(PREVIEW) down -v

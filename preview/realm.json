@@ -104,13 +104,13 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
       "redirectUris": [
-        "http://localhost:8400/auth/callback"
+        "*"
       ],
       "webOrigins": [
-        "http://localhost:8400"
+        "+"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost:8400/"
+        "post.logout.redirect.uris": "+"
       },
       "protocolMappers": [
         {

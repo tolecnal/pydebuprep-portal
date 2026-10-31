@@ -36,7 +36,7 @@ def test_compose_runs_portal_and_postgres() -> None:
     assert set(services) == {"db", "portal"}
     assert services["db"]["image"].startswith("postgres:17")
     assert services["portal"]["depends_on"]["db"]["condition"] == "service_healthy"
-    assert services["portal"]["ports"] == ["127.0.0.1:${PORTAL_PORT:-8000}:8000"]
+    assert services["portal"]["ports"] == ["${PORTAL_BIND:-127.0.0.1}:${PORTAL_PORT:-8000}:8000"]
     assert "healthcheck" in services["db"]
 
 

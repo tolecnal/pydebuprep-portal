@@ -21,6 +21,13 @@ make preview        # then open http://localhost:8400
 make preview-down   # stop it and delete its data
 ```
 
+On a headless machine, give the name or address you'll browse to; the preview's ports
+(8400 and Keycloak's 8480) are then published on every interface:
+
+```sh
+make preview PREVIEW_HOST=dev-box.example.lan   # then open http://dev-box.example.lan:8400
+```
+
 Sign in as `admin`, `lead` (lead of team web), `member` (of team web) or `auditor`;
 each password is the user name. Every secret in `compose.preview.yaml` is public: it is
 for trying the portal out, never for real reports.
