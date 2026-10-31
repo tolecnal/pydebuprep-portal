@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydebuprep.render import FORMATS
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -27,7 +27,16 @@ from pydebuprep_portal.queries import (
 )
 from pydebuprep_portal.rendering import MEDIA_TYPES, render_stored
 from pydebuprep_portal.settings import Settings
-from pydebuprep_portal.tokens import TokenError, authenticate
+from pydebuprep_portal.tokens import (
+    MAX_EXPIRES_DAYS,
+    MAX_NAME,
+    TokenError,
+    authenticate,
+    create_token,
+    list_tokens,
+    revoke_token,
+    token_request,
+)
 
 router = APIRouter(prefix="/api/v1")
 
@@ -241,3 +250,74 @@ def findings(
     )  # fmt: skip
     hits, next_before = page_of(hits, PAGE_SIZE)
     return FindingList(findings=[FindingOut(**h.__dict__) for h in hits], next_before=next_before)
+
+
+class TokenOut(BaseModel):
+    id: int
+    kind: str
+    name: str
+    public_id: str
+    created_by: str
+    created_at: datetime
+    expires_at: datetime | None
+    revoked_at: datetime | None
+    last_used_at: datetime | None
+
+
+class TokenList(BaseModel):
+    tokens: list[TokenOut]
+
+
+class TokenRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=MAX_NAME)
+    expires_days: int | None = Field(None, ge=1, le=MAX_EXPIRES_DAYS)
+
+
+class NewToken(BaseModel):
+    id: int
+    token: str = Field(description="Shown this once; the portal keeps only its hash")
+
+
+FORBIDDEN = HTTPException(403, "your roles don't allow this")
+TOKEN_FIELDS = tuple(TokenOut.model_fields)
+
+
+@router.get("/tokens", summary="Upload tokens (admins and auditors)")
+def tokens(viewer: ViewerDep, session: SessionDep) -> TokenList:
+    if not viewer.reads_all:
+        raise FORBIDDEN
+    return TokenList(
+        tokens=[TokenOut(**{f: getattr(t, f) for f in TOKEN_FIELDS}) for t in list_tokens(session)]
+    )
+
+
+@router.post("/tokens", status_code=201, summary="Create a global upload token (admins)")
+def new_token(request: TokenRequest, viewer: ViewerDep, session: SessionDep) -> NewToken:
+    if not viewer.is_admin:
+        raise FORBIDDEN
+    try:
+        name, expires = token_request(request.name, request.expires_days, datetime.now(UTC))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    token, plain = create_token(
+        session,
+        kind="global",
+        name=name,
+        created_by=f"{viewer.name} <{viewer.subject}>",
+        expires_at=expires,
+    )
+    return NewToken(id=token.id, token=plain)
+
+
+@router.delete(
+    "/tokens/{token_id}",
+    status_code=204,
+    summary="Revoke an upload token (admins)",
+    responses={404: {"description": "No such token"}},
+)
+def delete_token(token_id: int, viewer: ViewerDep, session: SessionDep) -> Response:
+    if not viewer.is_admin:
+        raise FORBIDDEN
+    if not revoke_token(session, token_id, datetime.now(UTC)):
+        raise HTTPException(404, "no such token")
+    return Response(status_code=204)

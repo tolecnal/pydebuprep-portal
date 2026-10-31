@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Upload tokens — pydebuprep portal{% endblock %}
+{% block main %}
+<h1>Upload tokens</h1>
+<p class="empty">Hosts send reports with a token; a token can't read anything. Store it on a host as <code>/etc/pydebuprep/token</code> (mode 0600) or in <code>PYDEBUPREP_TOKEN</code>.</p>
+{% if new_token %}
+<div class="notice">
+  <p>The token <strong>{{ new_name }}</strong> — copy it now, it won't be shown again:</p>
+  <p><code class="secret">{{ new_token }}</code></p>
+</div>
+{% endif %}
+{% if error %}<p class="notice">{{ error }}</p>{% endif %}
+{% if viewer.is_admin %}
+<form class="filters" method="post" action="/tokens">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <label>Name <input name="name" maxlength="100" required value="{{ form_name or '' }}"></label>
+  <label>Expires after (days, empty for never) <input name="expires_days" inputmode="numeric" size="6"></label>
+  <button type="submit">Create a global token</button>
+</form>
+{% endif %}
+{% if tokens %}
+<table>
+  <thead><tr><th>Name</th><th>Kind</th><th>Id</th><th>Created</th><th>Expires</th><th>Last used</th><th>State</th><th></th></tr></thead>
+  <tbody>
+  {% for token in tokens %}
+  <tr>
+    <td>{{ token.name }}</td>
+    <td>{{ token.kind }}</td>
+    <td><code>pdp_{{ token.public_id }}_…</code></td>
+    <td>{{ token.created_at | utc }}<br><span class="empty">{{ token.created_by }}</span></td>
+    <td>{% if token.expires_at %}{{ token.expires_at | utc }}{% else %}never{% endif %}</td>
+    <td>{% if token.last_used_at %}{{ token.last_used_at | utc }}{% else %}never{% endif %}</td>
+    <td>{% if token.revoked_at %}revoked {{ token.revoked_at | utc }}{% else %}active{% endif %}</td>
+    <td>{% if viewer.is_admin and not token.revoked_at %}
+      <form method="post" action="/tokens/{{ token.id }}/revoke" class="inline">
+        <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+        <button type="submit">Revoke</button>
+      </form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No tokens yet.</p>
+{% endif %}
+{% endblock %}

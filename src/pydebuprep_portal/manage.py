@@ -5,15 +5,13 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from alembic import command
 
 from pydebuprep_portal.db import make_engine, make_sessionmaker, migrations_config
 from pydebuprep_portal.settings import SettingsError, load_settings
-from pydebuprep_portal.tokens import create_token
-
-MAX_EXPIRES_DAYS = 3650
+from pydebuprep_portal.tokens import create_token, token_request
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -29,11 +27,12 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
+    name, expires = "", None
     if args.command == "create-token":
-        if not args.name.strip():
-            parser.error("the token needs a name")
-        if args.expires_days is not None and not 0 < args.expires_days <= MAX_EXPIRES_DAYS:
-            parser.error(f"--expires-days must be between 1 and {MAX_EXPIRES_DAYS}")
+        try:
+            name, expires = token_request(args.name, args.expires_days, datetime.now(UTC))
+        except ValueError as exc:
+            parser.error(str(exc))
     try:
         settings = load_settings(os.environ)
     except SettingsError as exc:
@@ -44,12 +43,9 @@ def main(argv: list[str] | None = None) -> int:
         print("Database schema is up to date.")
         return 0
     engine = make_engine(settings.database_url)
-    expires = None
-    if args.expires_days is not None:
-        expires = datetime.now(UTC) + timedelta(days=args.expires_days)
     with make_sessionmaker(engine)() as session:
         _, plain = create_token(
-            session, kind="global", name=args.name.strip(), created_by="manage", expires_at=expires
+            session, kind="global", name=name, created_by="manage", expires_at=expires
         )
     engine.dispose()
     print(plain)

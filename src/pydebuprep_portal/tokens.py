@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import re
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,6 +18,26 @@ TOKEN_PREFIX = "pdp_"  # nosec B105
 BEARER = re.compile(r"Bearer pdp_([0-9a-f]{8})_([A-Za-z0-9_-]{43})", re.IGNORECASE)
 # Compared against when the public id is unknown, so a miss takes as long as a hit.
 _NO_HASH = "0" * 64
+
+
+MAX_NAME = 100
+MAX_EXPIRES_DAYS = 3650
+
+
+def token_request(
+    name: str, expires_days: int | None, now: datetime
+) -> tuple[str, datetime | None]:
+    """A new token's name and expiry, checked; ValueError says what is wrong."""
+    name = name.strip()
+    if not name:
+        raise ValueError("the token needs a name")
+    if len(name) > MAX_NAME:
+        raise ValueError(f"a token's name may be at most {MAX_NAME} characters")
+    if expires_days is None:
+        return name, None
+    if not 0 < expires_days <= MAX_EXPIRES_DAYS:
+        raise ValueError(f"a token expires after 1 to {MAX_EXPIRES_DAYS} days")
+    return name, now + timedelta(days=expires_days)
 
 
 class TokenError(Exception):

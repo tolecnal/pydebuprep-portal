@@ -16,6 +16,7 @@
     <a href="/">Reports</a>
     <a href="/hosts">Hosts</a>
     <a href="/search">Search</a>
+    {% if viewer.reads_all %}<a href="/tokens">Tokens</a>{% endif %}
   </nav>
   <div class="who">
     <span class="name">{{ viewer.name }}</span>
