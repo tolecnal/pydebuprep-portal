@@ -89,7 +89,7 @@ def load_demo_data(session: Session, settings: Settings, now: datetime | None = 
             session, kind="team", name=f"{name} hosts", actor="demo", expires_at=None,
             team_id=team.id,
         )[0].id  # fmt: skip
-    fleet, fleet_plain = create_token(
+    fleet, _ = create_token(
         session, kind="global", name="demo fleet", actor="demo", expires_at=None
     )
     stored = 0
@@ -105,6 +105,6 @@ def load_demo_data(session: Session, settings: Settings, now: datetime | None = 
         {"report": {"min_severity": "warning", "todo": True}}, actor="demo",
     )  # fmt: skip
     return (
-        f"Demo data: 3 teams, {len(STORIES)} hosts, {stored} reports, 1 config.\n"
-        f"A global upload token: {fleet_plain}"
+        f"Demo data: 3 teams, {len(STORIES)} hosts, {stored} reports, 1 config. "
+        "Create an upload token with: manage create-token NAME"
     )
