@@ -25,7 +25,14 @@ def ensure_teams(session: Session, names: Iterable[str]) -> None:
         for name in sorted(set(names))
     ]  # fmt: skip
     if rows:
-        session.execute(insert(Team).values(rows).on_conflict_do_nothing(index_elements=["name"]))
+        created = session.scalars(
+            insert(Team)
+            .values(rows)
+            .on_conflict_do_nothing(index_elements=["name"])
+            .returning(Team.name)
+        ).all()
+        for name in created:
+            record(session, "sign-in", "team.create", name)
         session.commit()
 
 

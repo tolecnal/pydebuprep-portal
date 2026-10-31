@@ -3,6 +3,7 @@ for the API. Roles are read from the provider's groups at every sign-in."""
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Annotated, Any
 from urllib.parse import urlencode
@@ -24,6 +25,8 @@ from pydebuprep_portal.teams import ensure_teams
 from pydebuprep_portal.templating import error_page
 
 SESSION_USER = "user"
+# The signed-in user's part of the session cookie; the whole cookie must stay under 4 KB.
+MAX_SESSION_USER = 3000
 # A token signed with a key id the provider hasn't published makes us fetch its keys
 # again, but no more often than this: forged tokens must not hammer the provider.
 KEY_REFETCH_SECONDS = 60.0
@@ -45,7 +48,7 @@ def make_oauth(settings: Settings) -> OAuth:
         name="oidc",
         client_id=settings.oidc_client_id,
         client_secret=settings.oidc_client_secret,
-        server_metadata_url=f"{settings.oidc_issuer}/.well-known/openid-configuration",
+        server_metadata_url=settings.oidc_metadata_url,
         client_kwargs={"scope": "openid profile email"},
     )
     return oauth
@@ -113,15 +116,23 @@ async def callback(request: Request) -> Response:
         )
     next_path = safe_next(request.session.get("next"))
     viewer = _viewer(claims, _settings(request))
-    await run_in_threadpool(_ensure_teams, request, viewer.teams)
-    request.session.clear()  # a new session for the signed-in user
-    request.session[SESSION_USER] = {
+    user = {
         "sub": viewer.subject,
         "name": viewer.name,
         "roles": sorted(viewer.roles),
         "teams": sorted(viewer.teams),
         "leads": sorted(viewer.leads),
     }
+    if len(json.dumps(user)) > MAX_SESSION_USER:
+        # A browser drops a cookie over 4 KB, and sign-in would go round in circles.
+        return error_page(
+            request, 400, "Sign-in failed",
+            f"You are in too many teams ({len(viewer.teams)}) for the portal's session. "
+            "Ask your identity provider's admins to trim your pydebuprep groups.",
+        )  # fmt: skip
+    await run_in_threadpool(_ensure_teams, request, viewer.teams)
+    request.session.clear()  # a new session for the signed-in user
+    request.session[SESSION_USER] = user
     return RedirectResponse(next_path, status_code=303)
 
 
@@ -201,6 +212,8 @@ async def api_viewer(
             exp={"essential": True},
             sub={"essential": True},
         ).validate(token.claims)
+        if token.claims.get("typ") == "ID":  # an ID token is for the portal's sign-in only
+            raise refused
     except httpx.HTTPError:
         raise HTTPException(503, PROVIDER_DOWN) from None
     except (JoseError, ValueError):

@@ -36,7 +36,7 @@ def test_compose_runs_portal_and_postgres() -> None:
     assert set(services) == {"db", "portal"}
     assert services["db"]["image"].startswith("postgres:17")
     assert services["portal"]["depends_on"]["db"]["condition"] == "service_healthy"
-    assert services["portal"]["ports"] == ["127.0.0.1:${PORTAL_PORT:-8000}:8000"]
+    assert services["portal"]["ports"] == ["${PORTAL_BIND:-127.0.0.1}:${PORTAL_PORT:-8000}:8000"]
     assert "healthcheck" in services["db"]
 
 
@@ -103,3 +103,48 @@ def test_readme_covers_configs() -> None:
     for topic in ("api/v1/configs", "--config https://", "version", "credentials_file",
                   "manage create-config"):  # fmt: skip
         assert topic in text, topic
+
+
+def test_the_old_upload_limit_variable_warns(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    for name, value in BASE_ENV.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("PORTAL_MAX_UPLOAD_BYTES", "1000")
+    with caplog.at_level("WARNING"):
+        from_environment()
+    assert "PORTAL_MAX_UPLOAD_BYTES is no longer read" in caplog.text
+
+
+def test_security_workflows() -> None:
+    security = yaml.safe_load((ROOT / ".github/workflows/security.yml").read_text())
+    names = {job["name"] for job in security["jobs"].values()}
+    assert {"Bandit (Python security lint)", "ShellCheck", "Known vulnerabilities in Python dependencies",
+            "zizmor (GitHub Actions security)", "Dependency review"} <= names  # fmt: skip
+    codeql = yaml.safe_load((ROOT / ".github/workflows/codeql.yml").read_text())
+    assert codeql["jobs"]["analyze"]["strategy"]["matrix"]["language"] == ["python", "actions"]
+    assert "make audit" in (ROOT / ".github/workflows/security.yml").read_text()
+
+
+def test_preview_compose_and_realm() -> None:
+    import json
+
+    dev = yaml.safe_load((ROOT / "compose.preview.yaml").read_text())
+    assert set(dev["services"]) >= {"keycloak", "portal"}
+    env = dev["services"]["portal"]["environment"]
+    assert env["PORTAL_OIDC_METADATA_URL"].startswith("http://keycloak:8080/")
+    realm = json.loads((ROOT / "preview/realm.json").read_text())
+    groups = {g["name"] for g in realm["groups"]}
+    assert {
+        "pydebuprep-admins",
+        "pydebuprep-auditors",
+        "pydebuprep-team-web",
+        "pydebuprep-team-web-lead",
+    } <= groups
+    users = {u["username"] for u in realm["users"]}
+    assert {"admin", "lead", "member", "auditor"} <= users
+    (client,) = [c for c in realm["clients"] if c["clientId"] == "pydebuprep-portal"]
+    mappers = {m["protocolMapper"] for m in client["protocolMappers"]}
+    assert {"oidc-group-membership-mapper", "oidc-audience-mapper"} <= mappers
+    assert "preview:" in (ROOT / "Makefile").read_text()
+    assert "make preview" in (ROOT / "README.md").read_text()

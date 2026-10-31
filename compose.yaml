@@ -26,8 +26,9 @@ services:
     environment:
       PORTAL_DATABASE_URL: postgresql+psycopg://portal:${POSTGRES_PASSWORD}@db:5432/portal
     # Only the reverse proxy on this machine reaches the portal; it terminates TLS.
+    # (PORTAL_BIND=0.0.0.0 publishes it on every interface, for a preview.)
     ports:
-      - "127.0.0.1:${PORTAL_PORT:-8000}:8000"
+      - "${PORTAL_BIND:-127.0.0.1}:${PORTAL_PORT:-8000}:8000"
     restart: unless-stopped
 
 volumes:

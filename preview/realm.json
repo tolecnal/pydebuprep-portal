@@ -1,0 +1,141 @@
+{
+  "realm": "pydebuprep",
+  "enabled": true,
+  "sslRequired": "none",
+  "groups": [
+    {
+      "name": "pydebuprep-admins"
+    },
+    {
+      "name": "pydebuprep-auditors"
+    },
+    {
+      "name": "pydebuprep-team-web"
+    },
+    {
+      "name": "pydebuprep-team-web-lead"
+    },
+    {
+      "name": "pydebuprep-team-db"
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "email": "admin@example.invalid",
+      "emailVerified": true,
+      "firstName": "Ada",
+      "lastName": "Preview",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/pydebuprep-admins"
+      ]
+    },
+    {
+      "username": "lead",
+      "enabled": true,
+      "email": "lead@example.invalid",
+      "emailVerified": true,
+      "firstName": "Lee",
+      "lastName": "Preview",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "lead",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/pydebuprep-team-web-lead"
+      ]
+    },
+    {
+      "username": "member",
+      "enabled": true,
+      "email": "member@example.invalid",
+      "emailVerified": true,
+      "firstName": "Mia",
+      "lastName": "Preview",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "member",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/pydebuprep-team-web"
+      ]
+    },
+    {
+      "username": "auditor",
+      "enabled": true,
+      "email": "auditor@example.invalid",
+      "emailVerified": true,
+      "firstName": "Aud",
+      "lastName": "Preview",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "auditor",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/pydebuprep-auditors"
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "pydebuprep-portal",
+      "name": "pydebuprep portal (preview)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "preview-only-client-secret",
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "+"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "portal audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "pydebuprep-portal",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ]
+}

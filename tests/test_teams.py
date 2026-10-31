@@ -221,3 +221,28 @@ def test_visibility_of_an_unknown_team_is_404(signed_in: Callable[..., TestClien
         ).status_code
         == 404
     )
+
+
+def test_teams_made_at_sign_in_are_audited(
+    oidc_client: TestClient, stub: OIDCStub, db: Session
+) -> None:
+    make_team(db, "old")
+    login(oidc_client, stub, groups=["pydebuprep-team-old", "pydebuprep-team-new"])
+    entries = [(e.actor, e.action, e.target) for e in db.query(AuditEntry)]
+    assert entries == [("sign-in", "team.create", "new")]
+
+
+def test_too_many_teams_for_a_session_cookie(oidc_client: TestClient, stub: OIDCStub) -> None:
+    groups = [f"pydebuprep-team-{'t' * 50}{i:03d}" for i in range(80)]
+    resp = login(oidc_client, stub, groups=groups)
+    assert resp.status_code == 400
+    assert "too many teams" in resp.text
+
+
+def test_token_audit_names_the_team(db: Session) -> None:
+    from pydebuprep_portal.tokens import create_token
+
+    web = make_team(db, "web")
+    create_token(db, kind="team", name="t", actor="x", expires_at=None, team_id=web.id)
+    entry = db.query(AuditEntry).filter_by(action="token.create").one()
+    assert entry.details["team"] == "web" and "team_id" not in entry.details

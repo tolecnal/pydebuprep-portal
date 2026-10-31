@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
 from pydebuprep_portal.access import TEAM_NAME, Viewer, may_edit_configs, may_read_configs
@@ -82,7 +83,11 @@ def create_config(
     config.versions.append(ConfigVersion(version=1, values=first, created_at=now, created_by=actor))
     session.add(config)
     record(session, actor, "config.create", f"{team.name}/{name}")
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:  # created by someone else a moment ago
+        session.rollback()
+        raise ConfigError(422, f"team {team.name} already has a config {name}") from None
     return config
 
 

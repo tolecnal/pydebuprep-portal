@@ -6,7 +6,8 @@ cd "$(dirname "$0")/.."
 PYDEBUPREP=${PYDEBUPREP:-pydebuprep}
 work=$(mktemp -d)
 project=portal-smoke
-export POSTGRES_PASSWORD="smoke-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+POSTGRES_PASSWORD="smoke-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+export POSTGRES_PASSWORD
 export PORTAL_ENV_FILE="$work/env"
 PORTAL_PORT=$(python3 -c "import socket; s = socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1])")
 export PORTAL_PORT

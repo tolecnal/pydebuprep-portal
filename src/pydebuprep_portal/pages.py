@@ -37,7 +37,7 @@ from pydebuprep_portal.configs import (
     served_problems,
     served_url,
 )
-from pydebuprep_portal.db import get_session
+from pydebuprep_portal.db import Before, RowId, get_session
 from pydebuprep_portal.generator import (
     LOGS_FIELD,
     REPORT_FIELDS,
@@ -107,7 +107,7 @@ def home(
     worst: Worst | None = None,
     team: str | None = None,
     flagged: str | None = None,
-    before: int | None = None,
+    before: Before = None,
 ) -> HTMLResponse:
     team = team or None
     rows = list_reports(
@@ -130,7 +130,7 @@ def home(
 
 @router.get("/reports/{report_id}", response_class=HTMLResponse)
 def report_page(
-    request: Request, report_id: int, viewer: ViewerDep, session: SessionDep
+    request: Request, report_id: RowId, viewer: ViewerDep, session: SessionDep
 ) -> HTMLResponse:
     report = get_report(session, viewer, report_id)
     if report is None:
@@ -143,7 +143,7 @@ def report_page(
 
 @router.post("/reports/{report_id}/delete", dependencies=[Depends(require_csrf)])
 def delete_report_page(
-    request: Request, report_id: int, viewer: ViewerDep, session: SessionDep
+    request: Request, report_id: RowId, viewer: ViewerDep, session: SessionDep
 ) -> Response:
     try:
         deleted = delete_report(session, viewer, report_id, actor_of(viewer))
@@ -156,7 +156,7 @@ def delete_report_page(
 
 @router.get("/reports/{report_id}/html")
 def report_html(
-    request: Request, report_id: int, viewer: ViewerDep, session: SessionDep
+    request: Request, report_id: RowId, viewer: ViewerDep, session: SessionDep
 ) -> Response:
     report = get_report(session, viewer, report_id)
     if report is None:
@@ -170,7 +170,7 @@ def report_html(
 
 @router.get("/reports/{report_id}/download/{fmt}")
 def report_download(
-    request: Request, report_id: int, fmt: str, viewer: ViewerDep, session: SessionDep
+    request: Request, report_id: RowId, fmt: str, viewer: ViewerDep, session: SessionDep
 ) -> Response:
     report = get_report(session, viewer, report_id)
     if report is None or fmt not in FORMATS:
@@ -272,7 +272,7 @@ def search_page(
     check: str = "",
     severity: str = "",
     words: str = "",
-    before: int | None = None,
+    before: Before = None,
 ) -> HTMLResponse:
     form = {"host": host, "check": check, "severity": severity, "words": words}
     error = None
@@ -348,7 +348,7 @@ def create_token_page(
 
 @router.post("/tokens/{token_id}/revoke", dependencies=[Depends(require_csrf)])
 def revoke_token_page(
-    request: Request, token_id: int, viewer: ViewerDep, session: SessionDep
+    request: Request, token_id: RowId, viewer: ViewerDep, session: SessionDep
 ) -> Response:
     if not viewer.is_admin:
         return _forbidden(request)
@@ -457,7 +457,7 @@ def create_team_token_page(  # nosec B107
 
 @router.post("/teams/{name}/tokens/{token_id}/revoke", dependencies=[Depends(require_csrf)])
 def revoke_team_token_page(
-    request: Request, name: str, token_id: int, viewer: ViewerDep, session: SessionDep
+    request: Request, name: str, token_id: RowId, viewer: ViewerDep, session: SessionDep
 ) -> Response:
     team = visible_team(session, viewer, name)
     if team is None:
@@ -558,7 +558,7 @@ def change_settings_page(
 @router.get("/audit", response_class=HTMLResponse)
 def audit_page(
     request: Request, viewer: ViewerDep, session: SessionDep,
-    action: str = "", before: int | None = None,
+    action: str = "", before: Before = None,
 ) -> HTMLResponse:  # fmt: skip
     if not may_read_audit(viewer):
         return _forbidden(request)
@@ -678,7 +678,7 @@ def save_config_page(
 
 @router.get("/configs/{team}/{name}/versions/{number}", response_class=HTMLResponse)
 def config_version_page(
-    request: Request, team: str, name: str, number: int, viewer: ViewerDep, session: SessionDep
+    request: Request, team: str, name: str, number: RowId, viewer: ViewerDep, session: SessionDep
 ) -> HTMLResponse:
     config = get_config(session, viewer, team, name)
     version = None if config is None else get_version(config, number)

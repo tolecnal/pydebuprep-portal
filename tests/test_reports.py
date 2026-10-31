@@ -206,3 +206,32 @@ def test_htmx_keeps_no_page_snapshots() -> None:
 
     base = Path(__file__).resolve().parent.parent / "src/pydebuprep_portal/templates/base.html"
     assert '"historyCacheSize": 0' in base.read_text()
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/reports/99999999999999999999",
+        "/reports/99999999999999999999/html",
+        "/?before=99999999999999999999",
+        "/search?words=x&before=99999999999999999999",
+    ],
+)
+def test_ids_beyond_bigint_are_not_server_errors(admin: TestClient, path: str) -> None:
+    assert admin.get(path).status_code in (404, 422)
+
+
+def test_api_ids_beyond_bigint(admin: TestClient, bearer: Bearer) -> None:
+    h = bearer("pydebuprep-admins")
+    for path in (
+        "/api/v1/reports/99999999999999999999",
+        "/api/v1/reports?before=99999999999999999999",
+    ):
+        assert admin.get(path, headers=h).status_code in (404, 422), path
+
+
+def test_host_links_are_percent_encoded(admin: TestClient, add_report: AddReport) -> None:
+    add_report(hostname="web#1?x")
+    page = admin.get("/").text
+    assert 'href="/hosts/web%231%3Fx"' in page
+    assert admin.get("/hosts/web%231%3Fx").status_code == 200

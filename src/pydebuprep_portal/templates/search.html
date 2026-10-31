@@ -26,7 +26,7 @@
   <tbody>
   {% for hit in hits %}
   <tr>
-    <td><a href="/hosts/{{ hit.host }}">{{ hit.host }}</a></td>
+    <td><a href="/hosts/{{ hit.host | urlpart }}">{{ hit.host }}</a></td>
     <td><a href="/reports/{{ hit.report_id }}">#{{ hit.report_id }}</a></td>
     <td>{{ hit.generated_at | utc }}</td>
     <td>{{ hit.check_id }}</td>

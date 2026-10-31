@@ -11,6 +11,27 @@ pydebuprep works without the portal. A host uses it only when its config says so
 > teams and roles, global, team and host tokens, the unassigned queue, retention, the
 > audit log, and configs that hosts fetch with `pydebuprep --config https://…`.
 
+## Preview it locally
+
+With Docker, `make preview` builds the portal and starts it with PostgreSQL and a
+ready-made Keycloak, then fills it with demo teams, hosts and a few weeks of reports:
+
+```sh
+make preview        # then open http://localhost:8400
+make preview-down   # stop it and delete its data
+```
+
+On a headless machine, give the name or address you'll browse to; the preview's ports
+(8400 and Keycloak's 8480) are then published on every interface:
+
+```sh
+make preview PREVIEW_HOST=dev-box.example.lan   # then open http://dev-box.example.lan:8400
+```
+
+Sign in as `admin`, `lead` (lead of team web), `member` (of team web) or `auditor`;
+each password is the user name. Every secret in `compose.preview.yaml` is public: it is
+for trying the portal out, never for real reports.
+
 ## Running it
 
 The portal runs as a Docker image (Debian 13, `debian:trixie-slim`) next to PostgreSQL,
@@ -24,8 +45,15 @@ docker compose up -d
 `docker compose` builds the image, starts PostgreSQL, brings the database schema up to
 date and serves the portal on `127.0.0.1:8000`. Point the reverse proxy at it, and set
 `PORTAL_BASE_URL` to the URL people and hosts use, for example
-`https://portal.example.com`. The proxy must pass `X-Forwarded-Proto` and
-`X-Forwarded-For`; `PORTAL_FORWARDED_ALLOW_IPS` lists the proxies to trust for them.
+`https://portal.example.com`. The portal builds its links and redirects from
+`PORTAL_BASE_URL`, so the proxy's `X-Forwarded-*` headers only give the logs the client's
+address. To trust them, set `PORTAL_FORWARDED_ALLOW_IPS` to the address the proxy
+connects from *as the container sees it*: with compose that is the Docker network's
+gateway (`docker network inspect <project>_default`), not `127.0.0.1`.
+
+Let the proxy pass request bodies as large as the portal's upload limit (10 MiB by
+default; nginx's own default, `client_max_body_size 1m`, is too small), and keep it
+buffering them (nginx's default), so slow hosts are dealt with by the proxy.
 
 ## Signing in
 

@@ -6,7 +6,7 @@
   {% for row in rows %}
   <tr>
     <td><a href="/reports/{{ row.id }}">#{{ row.id }}</a>{% if row.config_stale %} <span class="flag" title="Ran with a saved copy of its config">stale config</span>{% endif %}</td>
-    <td><a href="/hosts/{{ row.host }}">{{ row.host }}</a></td>
+    <td><a href="/hosts/{{ row.host | urlpart }}">{{ row.host }}</a></td>
     <td>{{ row.team or "unassigned" }}{% if row.flagged_team %} <span class="flag" title="Sent with team {{ row.flagged_team }}'s token">flagged</span>{% endif %}</td>
     <td>{{ row.generated_at | utc }}</td>
     <td>{{ row.received_at | utc }}</td>

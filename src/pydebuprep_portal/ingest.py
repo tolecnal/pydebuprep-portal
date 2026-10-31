@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import zlib
 from datetime import UTC, datetime
+from functools import cache
 
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import best_match
 from pydebuprep.model import Report as ReportData
 from pydebuprep.model import Severity, all_findings, compute_summary
 from pydebuprep.reportfile import ReportFileError, load_report
+from pydebuprep.schema import report_schema
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from starlette.requests import Request
+from starlette.requests import ClientDisconnect, Request
 
 from pydebuprep_portal.audit import record
 from pydebuprep_portal.mapping import move_reports
@@ -64,6 +69,8 @@ async def read_body(request: Request, limit: int) -> bytes:
             raise IngestError(400, "the gzip data is cut short")
     except zlib.error:
         raise IngestError(400, "the body is not valid gzip data") from None
+    except ClientDisconnect:
+        raise IngestError(400, "the upload was cut off") from None
     return bytes(out)
 
 
@@ -76,16 +83,33 @@ def parse(body: bytes) -> ReportData:
         raise IngestError(422, "expected a JSON report object")
     try:
         report = load_report(text)
+        problem = schema_problem(json.loads(text))
     except ReportFileError as exc:
         raise IngestError(422, f"not a pydebuprep report: {exc}") from None
     except RecursionError:
         raise IngestError(422, "the report is nested too deeply") from None
+    if problem:
+        raise IngestError(422, f"does not match the report schema: {problem}")
     hostname = report.host.hostname
     if not valid_host_name(hostname):
         raise IngestError(422, f"host.hostname is not a host name: {hostname!r}")
     if _has_nul(report.to_dict()):
         raise IngestError(422, "the report contains a NUL character, which can't be stored")
     return report
+
+
+@cache
+def _report_validator() -> Draft202012Validator:
+    return Draft202012Validator(report_schema())
+
+
+def schema_problem(data: object) -> str | None:
+    """The first way DATA departs from pydebuprep's published report schema, or None."""
+    error = best_match(_report_validator().iter_errors(data))
+    if error is None:
+        return None
+    where = ".".join(str(part) for part in error.absolute_path) or "report"
+    return f"{where}: {error.message}"[:300]
 
 
 def valid_host_name(name: str) -> bool:
@@ -130,6 +154,9 @@ def store_report(
     token = session.get(Token, token_id)
     if token is None:  # pragma: no cover - authenticated a moment ago
         raise IngestError(401, "unknown upload token")
+    if token.revoked_at is not None or (token.expires_at is not None and token.expires_at <= now):
+        # Revoked or expired while the body arrived.
+        raise IngestError(401, "this upload token is no longer valid")
     if token.kind == "host" and token.host_name != data.host.hostname.lower():
         # Before the duplicate check: a host token can't resend another host's report.
         raise IngestError(403, f"this token is for host {token.host_name} only")

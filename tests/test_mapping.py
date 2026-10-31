@@ -236,3 +236,110 @@ def test_leads_have_no_queue_while_only_admins_map(
     assert 'href="/queue"' not in lead.get("/").text
     assert lead.get("/api/v1/queue", headers=bearer(*LEAD)).status_code == 403
     assert signed_in(*ADMIN).get("/queue").status_code == 200
+
+
+def _uploader(engine, token_id: int, hostname: str, generated_at: str):  # type: ignore[no-untyped-def]
+    from datetime import UTC, datetime
+
+    from pydebuprep_portal.db import make_sessionmaker
+    from pydebuprep_portal.ingest import store_report
+    from sample import sample_json
+
+    def upload() -> None:
+        with make_sessionmaker(engine)() as session:
+            store_report(session, sample_json(hostname=hostname, generated_at=generated_at).encode(),
+                         token_id, datetime.now(UTC))  # fmt: skip
+
+    return upload
+
+
+def test_map_host_and_an_upload_racing_both_ways(
+    db: Session,
+    engine,
+    queued: Host,
+    monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
+) -> None:
+    import threading
+    import time
+
+    from pydebuprep_portal import ingest, mapping
+    from pydebuprep_portal.access import Viewer
+    from pydebuprep_portal.db import make_sessionmaker
+    from pydebuprep_portal.models import Token
+
+    admin = Viewer("a", "Admin", frozenset({"admin"}))
+    token_id = db.query(Token).first().id  # type: ignore[union-attr]
+
+    def hold(target: object, name: str) -> tuple[threading.Event, threading.Event]:
+        """Make TARGET.NAME stop, inside its transaction, until released."""
+        inside, release = threading.Event(), threading.Event()
+        original = getattr(target, name)
+
+        def held(*args, **kw):  # type: ignore[no-untyped-def]
+            result = original(*args, **kw)
+            inside.set()
+            release.wait(10)
+            return result
+
+        monkeypatch.setattr(target, name, held)
+        return inside, release
+
+    # 1. Mapping holds the host first; the upload waits and lands in the team.
+    inside, release = hold(mapping, "move_reports")
+    mapper = threading.Thread(
+        target=lambda: mapping.map_host(make_sessionmaker(engine)(), admin, "q1", "web")
+    )
+    mapper.start()
+    assert inside.wait(10)
+    uploader = threading.Thread(
+        target=_uploader(engine, token_id, "q1", "2026-11-02T09:00:00+00:00")
+    )
+    uploader.start()
+    time.sleep(0.3)
+    assert uploader.is_alive()
+    release.set()
+    mapper.join(10)
+    uploader.join(10)
+    monkeypatch.undo()
+    assert teams_of_reports(db, "q1") == {"web"}
+
+    # 2. An upload holds the host first; remapping waits and moves the new report too.
+    inside, release = hold(ingest, "_assign")
+    uploader = threading.Thread(
+        target=_uploader(engine, token_id, "q1", "2026-11-03T09:00:00+00:00")
+    )
+    uploader.start()
+    assert inside.wait(10)
+    mapper = threading.Thread(
+        target=lambda: mapping.map_host(make_sessionmaker(engine)(), admin, "q1", "db")
+    )
+    mapper.start()
+    time.sleep(0.3)
+    assert mapper.is_alive()
+    release.set()
+    uploader.join(10)
+    mapper.join(10)
+    assert teams_of_reports(db, "q1") == {"db"}
+
+
+def test_remapping_recomputes_flags(signed_in: Callable[..., TestClient], db: Session) -> None:
+    from datetime import UTC, datetime
+
+    from pydebuprep_portal.ingest import store_report
+    from pydebuprep_portal.tokens import create_token
+    from sample import sample_json
+
+    web = make_team(db, "web")
+    make_team(db, "db")
+    web_token = create_token(
+        db, kind="team", name="web t", actor="t", expires_at=None, team_id=web.id
+    )[0]
+    report = store_report(db, sample_json(hostname="r1").encode(), web_token.id, datetime.now(UTC))[
+        0
+    ]
+    assert report.token_team_id is None  # sent with its own team's token
+    admin = signed_in(*ADMIN)
+    admin.post("/hosts/r1/map", data={"csrf_token": csrf_of(admin), "team": "db"})
+    db.expire_all()
+    moved = db.get(Report, report.id)
+    assert moved is not None and moved.token_team.name == "web"  # type: ignore[union-attr]

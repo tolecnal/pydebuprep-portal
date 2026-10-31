@@ -84,3 +84,10 @@ def test_teams_with_a_custom_prefix() -> None:
 )
 def test_valid_team_name(name: str, valid: bool) -> None:
     assert valid_team_name(name) is valid
+
+
+def test_role_groups_match_case_insensitively() -> None:
+    assert roles_from_groups(["PyDebUPrep-Admins", "/org/PYDEBUPREP-AUDITORS"], "pydebuprep-") == {
+        "admin",
+        "auditor",
+    }

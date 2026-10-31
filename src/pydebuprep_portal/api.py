@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from pydebuprep.render import FORMATS
+from pydebuprep.schema import report_schema
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -38,7 +39,7 @@ from pydebuprep_portal.configs import (
     served_problems,
     served_url,
 )
-from pydebuprep_portal.db import get_session
+from pydebuprep_portal.db import Before, RowId, get_session
 from pydebuprep_portal.ingest import IngestError, check_headers, read_body, store_report
 from pydebuprep_portal.mapping import MappingError, map_host, queue, queue_visible, unmap_host
 from pydebuprep_portal.models import Config, Host, Team, Token
@@ -195,7 +196,7 @@ def reports(
     host: str | None = None,
     team: str | None = None,
     flagged: bool = False,
-    before: int | None = None,
+    before: Before = None,
 ) -> ReportList:
     """Fifty at a time; pass `next_before` as `before` for the next page. `team` is a team's
     name or `unassigned`; `flagged` keeps reports sent with another team's token."""
@@ -208,7 +209,7 @@ def reports(
 
 
 @router.get("/reports/{report_id}", summary="A report's details", responses=NOT_FOUND)
-def report(report_id: int, viewer: ViewerDep, session: SessionDep) -> ReportDetail:
+def report(report_id: RowId, viewer: ViewerDep, session: SessionDep) -> ReportDetail:
     found = get_report(session, viewer, report_id)
     if found is None:
         raise HTTPException(404, "no such report")
@@ -229,7 +230,7 @@ def report(report_id: int, viewer: ViewerDep, session: SessionDep) -> ReportDeta
     response_class=Response,
     responses=NOT_FOUND,
 )
-def report_rendered(report_id: int, fmt: str, viewer: ViewerDep, session: SessionDep) -> Response:
+def report_rendered(report_id: RowId, fmt: str, viewer: ViewerDep, session: SessionDep) -> Response:
     """`fmt` is one of text, json, yaml, html, markdown, jira, confluence."""
     found = get_report(session, viewer, report_id)
     if found is None or fmt not in FORMATS:
@@ -299,7 +300,7 @@ def findings(
     check: str | None = None,
     severity: Literal["critical", "warning", "info"] | None = None,
     words: str | None = None,
-    before: int | None = None,
+    before: Before = None,
 ) -> FindingList:
     """`host` matches part of a name; every one of `words` must appear in the title."""
     hits = search_findings(
@@ -390,7 +391,7 @@ def new_token(request: TokenRequest, viewer: ViewerDep, session: SessionDep) -> 
     summary="Revoke any upload token (admins)",
     responses={404: {"description": "No such token"}},
 )
-def delete_token(token_id: int, viewer: ViewerDep, session: SessionDep) -> Response:
+def delete_token(token_id: RowId, viewer: ViewerDep, session: SessionDep) -> Response:
     if not viewer.is_admin:
         raise FORBIDDEN
     if not revoke_token(session, token_id, datetime.now(UTC), actor_of(viewer)):
@@ -435,7 +436,9 @@ def new_team_token(
     summary="Revoke a team's token (admins, the team's leads)",
     responses=TEAM_NOT_FOUND,
 )
-def delete_team_token(name: str, token_id: int, viewer: ViewerDep, session: SessionDep) -> Response:
+def delete_team_token(
+    name: str, token_id: RowId, viewer: ViewerDep, session: SessionDep
+) -> Response:
     team = _team(session, viewer, name)
     if not may_manage_tokens(viewer, "team", team.name):
         raise FORBIDDEN
@@ -560,7 +563,7 @@ def change_team(name: str, request: TeamChange, viewer: ViewerDep, session: Sess
     summary="Delete a report (admins; leads, their team's)",
     responses=NOT_FOUND,
 )
-def remove_report(report_id: int, viewer: ViewerDep, session: SessionDep) -> Response:
+def remove_report(report_id: RowId, viewer: ViewerDep, session: SessionDep) -> Response:
     try:
         deleted = delete_report(session, viewer, report_id, actor_of(viewer))
     except PermissionError as exc:
@@ -623,6 +626,8 @@ def put_team_retention(
 def put_host_retention(
     name: str, request: RetentionBody, viewer: ViewerDep, session: SessionDep
 ) -> RetentionBody:
+    if not may_set_retention(viewer):  # before the lookup: don't confirm host names
+        raise FORBIDDEN
     host = session.scalar(select(Host).where(Host.name == name.lower()))
     if host is None:
         raise HTTPException(404, "no such host")
@@ -646,7 +651,7 @@ class AuditList(BaseModel):
 
 @router.get("/audit", summary="The audit log, newest first (admins and auditors)")
 def audit_log(
-    viewer: ViewerDep, session: SessionDep, action: str | None = None, before: int | None = None
+    viewer: ViewerDep, session: SessionDep, action: str | None = None, before: Before = None
 ) -> AuditList:
     """`action` keeps the actions starting with it, e.g. `token.` or `host.map`."""
     if not may_read_audit(viewer):
@@ -858,7 +863,7 @@ def put_config(
     responses={200: {"content": {"application/yaml": {}}}, **CONFIG_ERRORS},
 )
 def config_version(
-    request: Request, team: str, name: str, number: int, viewer: ViewerDep, session: SessionDep
+    request: Request, team: str, name: str, number: RowId, viewer: ViewerDep, session: SessionDep
 ) -> Response:
     config = _readable(session, viewer, team, name)
     version = get_version(config, number)
@@ -866,3 +871,9 @@ def config_version(
         raise HTTPException(404, "no such version")
     text = render_served(request.app.state.settings, config, version)
     return Response(text, media_type="application/yaml; charset=utf-8")
+
+
+@router.get("/schema/report", summary="The JSON Schema uploads must match")
+def report_schema_document() -> dict[str, Any]:
+    """pydebuprep's published report schema, the one uploads are checked against."""
+    return report_schema()

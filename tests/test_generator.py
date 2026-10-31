@@ -117,7 +117,7 @@ def test_bad_form_values_are_named() -> None:
 def test_list_from_lines() -> None:
     form = defaults_form()
     form["logs.ignore"] = "a\n\n b \n"
-    assert values_from_form(form) == {"logs": {"ignore": ["a", "b"]}}
+    assert values_from_form(form) == {"logs": {"ignore": ["a", " b "]}}
 
 
 def test_fields_not_rendered_are_left_alone() -> None:
@@ -229,3 +229,9 @@ def test_validate_keeps_every_kind_of_change() -> None:
 def test_nul_and_deeply_nested_patterns_are_refused(values: Any) -> None:
     with pytest.raises(ConfigValuesError):
         validate_values(values, SERVED, UPLOAD)
+
+
+def test_list_items_are_kept_as_typed() -> None:
+    form = defaults_form()
+    form["logs.ignore"] = " leading\r\ntrailing \r\n\r\n  \r\nx"
+    assert values_from_form(form) == {"logs": {"ignore": [" leading", "trailing ", "x"]}}

@@ -33,9 +33,10 @@ def roles_from_groups(groups: object, prefix: str) -> frozenset[str]:
     if not isinstance(groups, list):
         return frozenset()
     roles = set()
+    prefix = prefix.lower()
     for group in groups:
         if isinstance(group, str):
-            name = group.rsplit("/", 1)[-1]
+            name = group.rsplit("/", 1)[-1].lower()
             if name.startswith(prefix) and name[len(prefix) :] in ROLES:
                 roles.add(ROLES[name[len(prefix) :]])
     return frozenset(roles)

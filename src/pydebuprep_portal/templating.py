@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse
@@ -27,6 +27,7 @@ def _urlencode_set(params: dict[str, Any]) -> str:
 
 
 templates.env.filters["utc"] = _utc
+templates.env.filters["urlpart"] = lambda value: quote(str(value), safe="")
 templates.env.filters["urlencode_set"] = _urlencode_set
 templates.env.filters["combine"] = lambda a, b: {**a, **b}
 
