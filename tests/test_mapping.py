@@ -140,7 +140,7 @@ def test_lead_sees_queue_names_not_reports(
     report = db.query(Report).first()
     assert lead.get(f"/reports/{report.id}").status_code == 404  # type: ignore[union-attr]
     hosts = lead.get("/api/v1/queue", headers=bearer(*LEAD)).json()["hosts"]
-    assert [(h["name"], h["reports"]) for h in hosts] == [("q1", 2)]
+    assert [(h["name"], h["reports"]) for h in hosts] == [("q1", None)]
     admin_page = signed_in(*ADMIN).get("/queue").text
     assert 'href="/hosts/q1"' in admin_page
 
@@ -213,3 +213,26 @@ def test_queue_is_empty_for_members(db: Session, queued: Host) -> None:
     assert [h.name for h in queue(db, Viewer("l", "l", frozenset(), leads=frozenset({"web"})))] == [
         "q1"
     ]
+
+
+def test_leads_see_no_report_content_in_the_queue(
+    signed_in: Callable[..., TestClient], queued: Host, bearer: Bearer
+) -> None:
+    lead = signed_in(*LEAD)
+    page = lead.get("/queue").text
+    assert "q1" in page and 'class="sev' not in page and "<th>Reports</th>" not in page
+    (host,) = lead.get("/api/v1/queue", headers=bearer(*LEAD)).json()["hosts"]
+    assert (host["worst"], host["reports"]) == (None, None)
+    (host,) = lead.get("/api/v1/queue", headers=bearer(*ADMIN)).json()["hosts"]
+    assert (host["worst"], host["reports"]) == ("critical", 2)
+
+
+def test_leads_have_no_queue_while_only_admins_map(
+    signed_in: Callable[..., TestClient], db: Session, queued: Host, bearer: Bearer
+) -> None:
+    only_admins_map(db, True)
+    lead = signed_in(*LEAD)
+    assert lead.get("/queue").status_code == 403
+    assert 'href="/queue"' not in lead.get("/").text
+    assert lead.get("/api/v1/queue", headers=bearer(*LEAD)).status_code == 403
+    assert signed_in(*ADMIN).get("/queue").status_code == 200

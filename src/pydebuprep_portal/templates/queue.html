@@ -5,7 +5,7 @@
 <p class="empty">Hosts that reported with a global token and belong to no team yet. Mapping a host moves its reports to the team.</p>
 {% if hosts %}
 <table>
-  <thead><tr><th>Host</th><th>OS</th><th>First seen</th><th>Last seen</th><th>Reports</th><th>Worst</th>{% if team_choices %}<th>Map to</th>{% endif %}</tr></thead>
+  <thead><tr><th>Host</th><th>OS</th><th>First seen</th><th>Last seen</th>{% if viewer.reads_all %}<th>Reports</th><th>Worst</th>{% endif %}{% if team_choices %}<th>Map to</th>{% endif %}</tr></thead>
   <tbody>
   {% for host in hosts %}
   <tr>
@@ -13,8 +13,8 @@
     <td>{{ host.os }}</td>
     <td>{{ host.first_seen | utc }}</td>
     <td>{{ host.last_seen | utc }}</td>
-    <td class="num">{{ host.reports }}</td>
-    <td><span class="sev sev-{{ host.worst }}">{{ host.worst }}</span></td>
+    {% if viewer.reads_all %}<td class="num">{{ host.reports }}</td>
+    <td><span class="sev sev-{{ host.worst }}">{{ host.worst }}</span></td>{% endif %}
     {% if team_choices %}<td>
       <form method="post" action="/queue/{{ host.name }}/map" class="inline">
         <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">

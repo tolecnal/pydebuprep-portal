@@ -18,7 +18,6 @@ from pydebuprep_portal.access import (
     may_manage_tokens,
     may_read_audit,
     may_read_tokens,
-    may_see_queue_hosts,
     may_set_retention,
     may_set_visibility,
 )
@@ -26,7 +25,7 @@ from pydebuprep_portal.audit import actor_of, list_audit
 from pydebuprep_portal.auth import api_viewer
 from pydebuprep_portal.db import get_session
 from pydebuprep_portal.ingest import IngestError, check_headers, read_body, store_report
-from pydebuprep_portal.mapping import MappingError, map_host, queue, unmap_host
+from pydebuprep_portal.mapping import MappingError, map_host, queue, queue_visible, unmap_host
 from pydebuprep_portal.models import Host, Team, Token
 from pydebuprep_portal.queries import (
     ReportRow,
@@ -433,8 +432,8 @@ class QueuedHostOut(BaseModel):
     os: str
     first_seen: datetime
     last_seen: datetime
-    reports: int
-    worst: str
+    reports: int | None = Field(description="None for leads, who see no report content")
+    worst: str | None
 
 
 class QueueOut(BaseModel):
@@ -459,7 +458,7 @@ def _mapping_error(exc: MappingError) -> HTTPException:
 def unassigned_queue(viewer: ViewerDep, session: SessionDep) -> QueueOut:
     """Leads see the host names, to map them; reading the queued reports needs an admin
     or auditor."""
-    if not may_see_queue_hosts(viewer):
+    if not queue_visible(session, viewer):
         raise FORBIDDEN
     return QueueOut(hosts=[QueuedHostOut(**h.__dict__) for h in queue(session, viewer)])
 

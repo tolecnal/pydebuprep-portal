@@ -15,7 +15,9 @@ from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from pydebuprep_portal.audit import record
+from pydebuprep_portal.mapping import move_reports
 from pydebuprep_portal.models import Finding, Host, Report, Team, Token
+from pydebuprep_portal.settings_store import get_settings
 
 MAX_HOSTNAME = 253
 ENCODINGS = ("identity", "gzip")
@@ -157,12 +159,13 @@ def _insert(
     # Locked until this report is stored, so a host being mapped meanwhile can't leave
     # the report behind in the queue: whoever locks the host second sees the first's work.
     host = session.scalar(select(Host).where(Host.name == name).with_for_update())
+    new = host is None
     if host is None:
         host = Host(name=name, first_seen=now, last_seen=now)
         session.add(host)
         session.flush()  # a host created concurrently fails here and is retried
     host.last_seen = now
-    team_id, token_team_id = _assign(session, host, token)
+    team_id, token_team_id = _assign(session, host, token, new=new)
     summary = compute_summary(data.results)
     report = Report(
         host=host,
@@ -196,20 +199,26 @@ def _insert(
     return report
 
 
-def _assign(session: Session, host: Host, token: Token) -> tuple[int | None, int | None]:
+def _assign(
+    session: Session, host: Host, token: Token, *, new: bool
+) -> tuple[int | None, int | None]:
     """(team, flag) of a new report of HOST sent with TOKEN. A mapped host's reports go to
-    its team, flagged when another team's token sent them; an unmapped host is mapped to
-    a team or host token's team at once; with a global token it stays in the queue."""
+    its team, flagged when another team's token sent them. With a team or host token, a
+    new host joins the token's team at once; a host waiting in the queue does too, with
+    its earlier reports, unless only admins map hosts: then the report waits in the queue,
+    flagged with the token's team. With a global token, an unmapped host stays queued."""
     if host.team_id is not None:
         foreign = token.team_id is not None and token.team_id != host.team_id
         return host.team_id, token.team_id if foreign else None
-    if token.team_id is not None:
-        host.team_id = token.team_id
-        team = session.get(Team, token.team_id)
-        record(session, f"token {token.name}", "host.map", host.name,
-               team=team.name if team else None, how="first upload")  # fmt: skip
-        return token.team_id, None
-    return None, None
+    if token.team_id is None:
+        return None, None
+    if not new and get_settings(session).only_admins_map:
+        return None, token.team_id
+    moved = move_reports(session, host, token.team_id)
+    team = session.get(Team, token.team_id)
+    record(session, f"token {token.name}", "host.map", host.name,
+           team=team.name if team else None, how="first upload", reports_moved=moved)  # fmt: skip
+    return token.team_id, None
 
 
 def _used(session: Session, token_id: int, now: datetime) -> None:

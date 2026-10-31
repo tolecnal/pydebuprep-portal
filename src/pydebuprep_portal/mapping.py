@@ -29,14 +29,21 @@ class QueuedHost:
     os: str
     first_seen: datetime
     last_seen: datetime
-    reports: int
-    worst: str
+    reports: int | None  # None for leads: they see no report content
+    worst: str | None
+
+
+def queue_visible(session: Session, viewer: Viewer) -> bool:
+    """Admins and auditors read the queue; leads see its host names while they may map."""
+    if viewer.reads_all:
+        return True
+    return may_see_queue_hosts(viewer) and not get_settings(session).only_admins_map
 
 
 def queue(session: Session, viewer: Viewer) -> list[QueuedHost]:
-    """Unmapped hosts with their newest report's OS and worst severity. Leads see these
-    rows (to map hosts) but not the reports."""
-    if not may_see_queue_hosts(viewer):
+    """Unmapped hosts with their newest report's OS. Admins and auditors also get the
+    number of reports and the worst severity; leads get the names only, to map hosts."""
+    if not queue_visible(session, viewer):
         return []
     ranked = (
         select(
@@ -68,8 +75,8 @@ def queue(session: Session, viewer: Viewer) -> list[QueuedHost]:
             os=f"{row.os_id} {row.os_version} ({row.codename})",
             first_seen=row.Host.first_seen,
             last_seen=row.Host.last_seen,
-            reports=row.reports,
-            worst=row.worst,
+            reports=row.reports if viewer.reads_all else None,
+            worst=row.worst if viewer.reads_all else None,
         )
         for row in session.execute(query)
     ]
@@ -90,10 +97,13 @@ def _host(session: Session, viewer: Viewer, name: str) -> Host:
     raise MappingError(404, "no such host")
 
 
-def _move(session: Session, host: Host, team_id: int | None) -> int:
-    """Move every report of HOST to TEAM_ID (None: the queue); the number moved."""
+def move_reports(session: Session, host: Host, team_id: int | None) -> int:
+    """Put HOST and every one of its reports in TEAM_ID (None: the queue); the number of
+    reports that moved."""
     result = session.execute(
-        update(Report).where(Report.host_id == host.id).values(team_id=team_id)
+        update(Report)
+        .where(Report.host_id == host.id, Report.team_id.is_distinct_from(team_id))
+        .values(team_id=team_id)
     )
     moved = cast(CursorResult[Any], result).rowcount
     if team_id is not None:  # a flag for the team the reports now belong to is moot
@@ -122,11 +132,11 @@ def map_host(session: Session, viewer: Viewer, host_name: str, team_name: str) -
     if not allowed:
         session.rollback()
         raise MappingError(403, "your roles don't allow mapping this host to this team")
-    if host.team_id == team.id:
+    old = host.team.name if host.team else None
+    moved = move_reports(session, host, team.id)
+    if old == team.name and not moved:  # nothing to do
         session.rollback()
         return 0
-    old = host.team.name if host.team else None
-    moved = _move(session, host, team.id)
     record(session, actor_of(viewer), "host.map", host.name, team=team.name, **{"from": old},
            reports_moved=moved)  # fmt: skip
     session.commit()
@@ -143,7 +153,7 @@ def unmap_host(session: Session, viewer: Viewer, host_name: str) -> int:
         session.rollback()
         return 0
     old = host.team.name if host.team else None
-    moved = _move(session, host, None)
+    moved = move_reports(session, host, None)
     record(session, actor_of(viewer), "host.unmap", host.name, **{"from": old},
            reports_moved=moved)  # fmt: skip
     session.commit()
@@ -151,9 +161,8 @@ def unmap_host(session: Session, viewer: Viewer, host_name: str) -> int:
 
 
 def team_choices(session: Session, viewer: Viewer) -> list[str]:
-    """The teams VIEWER may map queued hosts into."""
+    """The teams VIEWER may map queued hosts into (leads see the queue only while they
+    may map, see queue_visible)."""
     if viewer.is_admin:
         return list(session.scalars(select(Team.name).order_by(Team.name)))
-    if get_settings(session).only_admins_map:
-        return []
     return sorted(viewer.leads)

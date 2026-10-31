@@ -19,14 +19,20 @@ from pydebuprep_portal.access import (
     may_manage_tokens,
     may_read_audit,
     may_read_tokens,
-    may_see_queue_hosts,
     may_set_retention,
     may_set_visibility,
 )
 from pydebuprep_portal.audit import actor_of, list_audit
 from pydebuprep_portal.auth import page_viewer
 from pydebuprep_portal.db import get_session
-from pydebuprep_portal.mapping import MappingError, map_host, queue, team_choices, unmap_host
+from pydebuprep_portal.mapping import (
+    MappingError,
+    map_host,
+    queue,
+    queue_visible,
+    team_choices,
+    unmap_host,
+)
 from pydebuprep_portal.models import Host, Team
 from pydebuprep_portal.queries import (
     delete_report,
@@ -215,7 +221,7 @@ def _map(
 
 @router.get("/queue", response_class=HTMLResponse)
 def queue_page(request: Request, viewer: ViewerDep, session: SessionDep) -> HTMLResponse:
-    if not may_see_queue_hosts(viewer):
+    if not queue_visible(session, viewer):
         return _forbidden(request)
     return page(
         request, "queue.html", viewer, hosts=queue(session, viewer),

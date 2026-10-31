@@ -62,7 +62,7 @@ def test_unmapped_host_with_team_token_is_mapped_at_once(
     assert report.host.team.name == "web"  # type: ignore[union-attr]
     entry = db.query(AuditEntry).filter_by(action="host.map").one()
     assert (entry.actor, entry.target) == ("token web token", "w2")
-    assert entry.details == {"team": "web", "how": "first upload"}
+    assert entry.details == {"team": "web", "how": "first upload", "reports_moved": 0}
 
 
 def test_unmapped_host_with_host_token_is_mapped(db: Session, tokens: dict[str, Token]) -> None:
@@ -132,3 +132,55 @@ def test_upload_during_mapping_lands_in_the_team(
     db.expire_all()
     assert {r.team_id for r in db.query(Report)} == {web_id}
     assert len(stored) == 1
+
+
+def only_admins_map(db: Session) -> None:
+    from pydebuprep_portal.settings_store import get_settings, update_settings
+
+    s = get_settings(db)
+    update_settings(db, "test", retention_days=s.retention_days, only_admins_map=True,
+                    max_upload_bytes=s.max_upload_bytes)  # fmt: skip
+
+
+def test_a_queued_host_switching_to_a_team_token_brings_its_reports(
+    db: Session, tokens: dict[str, Token]
+) -> None:
+    upload(db, tokens["global"], hostname="s1", generated_at="2026-10-01T09:00:00+00:00")
+    upload(db, tokens["web"], hostname="s1")
+    db.expire_all()
+    assert {team_of(r) for r in db.query(Report)} == {"web"}
+    entry = db.query(AuditEntry).filter_by(action="host.map").one()
+    assert entry.details == {"team": "web", "how": "first upload", "reports_moved": 1}
+
+
+def test_mapping_to_the_same_team_collects_stragglers(
+    db: Session, tokens: dict[str, Token], signed_in: object
+) -> None:
+    from pydebuprep_portal.access import Viewer
+    from pydebuprep_portal.mapping import map_host
+
+    report = upload(db, tokens["web"], hostname="s2")
+    report.team_id = None  # a report left behind somehow
+    db.commit()
+    moved = map_host(db, Viewer("a", "Admin", frozenset({"admin"})), "s2", "web")
+    assert moved == 1
+    db.expire_all()
+    assert {team_of(r) for r in db.query(Report)} == {"web"}
+
+
+def test_only_admins_map_keeps_a_queued_host_in_the_queue(
+    db: Session, tokens: dict[str, Token]
+) -> None:
+    upload(db, tokens["global"], hostname="s3", generated_at="2026-10-01T09:00:00+00:00")
+    only_admins_map(db)
+    claimed = upload(db, tokens["web"], hostname="s3")
+    assert (team_of(claimed), claimed.host.team_id) == (None, None)
+    assert claimed.token_team.name == "web"  # type: ignore[union-attr]  # flagged for the admins
+    later = upload(db, tokens["global"], hostname="s3", generated_at="2026-11-02T09:00:00+00:00")
+    assert team_of(later) is None
+    assert db.query(AuditEntry).filter_by(action="host.map").count() == 0
+
+
+def test_only_admins_map_still_maps_a_new_host(db: Session, tokens: dict[str, Token]) -> None:
+    only_admins_map(db)
+    assert team_of(upload(db, tokens["web"], hostname="brand-new")) == "web"
