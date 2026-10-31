@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Hosts — pydebuprep portal{% endblock %}
+{% block main %}
+<h1>Hosts</h1>
+<form class="filters" method="get" action="/hosts">
+  <label>Name <input type="search" name="name" value="{{ name_filter }}"></label>
+  <label><input type="checkbox" name="worse" value="1"{% if worse %} checked{% endif %}> Newest report worse than the one before</label>
+  <button type="submit">Filter</button>
+</form>
+{% if rows %}
+<table>
+  <thead><tr><th>Host</th><th>Newest report</th><th>Generated</th><th>Worst</th><th>Before</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+  <tr>
+    <td><a href="/hosts/{{ row.name }}">{{ row.name }}</a></td>
+    <td><a href="/reports/{{ row.last_report_id }}">#{{ row.last_report_id }}</a></td>
+    <td>{{ row.last_generated_at | utc }}</td>
+    <td><span class="sev sev-{{ row.worst }}">{{ row.worst }}</span>{% if row.worse %} <span class="flag">worse</span>{% endif %}</td>
+    <td>{% if row.previous_worst %}<span class="sev sev-{{ row.previous_worst }}">{{ row.previous_worst }}</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No hosts to show.</p>
+{% endif %}
+{% endblock %}

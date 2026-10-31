@@ -28,15 +28,16 @@ def _urlencode_set(params: dict[str, Any]) -> str:
 
 templates.env.filters["utc"] = _utc
 templates.env.filters["urlencode_set"] = _urlencode_set
+templates.env.filters["combine"] = lambda a, b: {**a, **b}
 
 
 def page(
-    request: Request, name: str, viewer: Viewer | None, status_code: int = 200, **context: Any
+    request: Request, template: str, viewer: Viewer | None, status_code: int = 200, **context: Any
 ) -> HTMLResponse:
     context |= {"viewer": viewer, "csrf_field": CSRF_FIELD}
     if viewer is not None:
         context["csrf_token"] = csrf_token(request)
-    return templates.TemplateResponse(request, name, context, status_code=status_code)
+    return templates.TemplateResponse(request, template, context, status_code=status_code)
 
 
 def error_page(request: Request, status_code: int, title: str, message: str) -> HTMLResponse:

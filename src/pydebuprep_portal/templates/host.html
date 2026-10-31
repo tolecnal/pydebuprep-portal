@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ host }} — pydebuprep portal{% endblock %}
+{% block main %}
+<h1>{{ host }}</h1>
+<p class="empty">Reports oldest first. A change of OS or kernel between reports that shouldn't be there may mean two machines report the same host name.</p>
+<table>
+  <thead><tr><th>Report</th><th>Generated</th><th>Worst</th><th>Critical</th><th>Warning</th>
+    <th>Info</th><th>Errors</th><th>OS</th><th>Kernel</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+  <tr>
+    <td><a href="/reports/{{ row.id }}">#{{ row.id }}</a>{% if row.config_stale %} <span class="flag">stale config</span>{% endif %}</td>
+    <td>{{ row.generated_at | utc }}</td>
+    <td><span class="sev sev-{{ row.worst }}">{{ row.worst }}</span></td>
+    <td class="num">{{ row.critical }}</td><td class="num">{{ row.warning }}</td>
+    <td class="num">{{ row.info }}</td><td class="num">{{ row.error }}</td>
+    <td>{{ row.os }}</td><td>{{ row.kernel }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

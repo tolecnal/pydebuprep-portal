@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Search — pydebuprep portal{% endblock %}
+{% block main %}
+<h1>Search findings</h1>
+<form class="filters" method="get" action="/search">
+  <label>Host <input type="search" name="host" value="{{ form.host }}"></label>
+  <label>Check
+    <select name="check">
+      <option value="">any</option>
+      {% for check in checks %}<option value="{{ check }}"{% if form.check == check %} selected{% endif %}>{{ check }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Severity
+    <select name="severity">
+      <option value="">any</option>
+      {% for level in severities %}<option value="{{ level }}"{% if form.severity == level %} selected{% endif %}>{{ level }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Words in the title <input type="search" name="words" value="{{ form.words }}"></label>
+  <button type="submit">Search</button>
+</form>
+{% if error %}<p class="notice">{{ error }}</p>{% endif %}
+{% if hits %}
+<table>
+  <thead><tr><th>Host</th><th>Report</th><th>Generated</th><th>Check</th><th>Severity</th><th>Finding</th></tr></thead>
+  <tbody>
+  {% for hit in hits %}
+  <tr>
+    <td><a href="/hosts/{{ hit.host }}">{{ hit.host }}</a></td>
+    <td><a href="/reports/{{ hit.report_id }}">#{{ hit.report_id }}</a></td>
+    <td>{{ hit.generated_at | utc }}</td>
+    <td>{{ hit.check_id }}</td>
+    <td><span class="sev sev-{{ hit.severity }}">{{ hit.severity }}</span></td>
+    <td>{{ hit.title }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if next_before %}
+<p class="more"><a href="/search?{{ form | combine({'before': next_before}) | urlencode_set }}">Older findings</a></p>
+{% endif %}
+{% elif searched and not error %}
+<p class="empty">No findings match.</p>
+{% endif %}
+{% endblock %}

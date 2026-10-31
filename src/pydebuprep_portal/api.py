@@ -15,7 +15,16 @@ from pydebuprep_portal.access import Viewer
 from pydebuprep_portal.auth import api_viewer
 from pydebuprep_portal.db import get_session
 from pydebuprep_portal.ingest import IngestError, check_headers, read_body, store_report
-from pydebuprep_portal.queries import ReportRow, get_report, list_reports, page_of, report_row
+from pydebuprep_portal.queries import (
+    ReportRow,
+    get_report,
+    host_timeline,
+    list_hosts,
+    list_reports,
+    page_of,
+    report_row,
+    search_findings,
+)
 from pydebuprep_portal.rendering import MEDIA_TYPES, render_stored
 from pydebuprep_portal.settings import Settings
 from pydebuprep_portal.tokens import TokenError, authenticate
@@ -95,6 +104,7 @@ class ReportSummary(BaseModel):
     info: int
     error: int
     os: str
+    kernel: str
     config_stale: bool
 
     @classmethod
@@ -111,7 +121,6 @@ class ReportDetail(ReportSummary):
     os_id: str
     os_version: str
     codename: str
-    kernel: str
     tool_version: str
     token: str
     formats: list[str]
@@ -141,7 +150,6 @@ def report(report_id: int, viewer: ViewerDep, session: SessionDep) -> ReportDeta
         os_id=found.os_id,
         os_version=found.os_version,
         codename=found.codename,
-        kernel=found.kernel,
         tool_version=found.tool_version,
         token=found.token.name,
         formats=list(FORMATS),
@@ -160,3 +168,76 @@ def report_rendered(report_id: int, fmt: str, viewer: ViewerDep, session: Sessio
     if found is None or fmt not in FORMATS:
         raise HTTPException(404, "no such report or format")
     return Response(render_stored(found.body, fmt), media_type=MEDIA_TYPES[fmt])
+
+
+class HostSummary(BaseModel):
+    name: str
+    last_report_id: int
+    last_generated_at: datetime
+    worst: str
+    previous_worst: str | None
+    worse: bool
+
+
+class HostList(BaseModel):
+    hosts: list[HostSummary]
+
+
+class Timeline(BaseModel):
+    host: str
+    reports: list[ReportSummary]
+
+
+@router.get("/hosts", summary="Hosts and their newest report")
+def hosts(
+    viewer: ViewerDep, session: SessionDep, name: str | None = None, worse_only: bool = False
+) -> HostList:
+    """`worse` is true when the newest report is worse than the one before it."""
+    rows = list_hosts(session, viewer, name=name, worse_only=worse_only)
+    return HostList(hosts=[HostSummary(**r.__dict__) for r in rows])
+
+
+@router.get(
+    "/hosts/{name}/timeline",
+    summary="A host's reports, oldest first",
+    responses={404: {"description": "No such host, or not visible to you"}},
+)
+def timeline(name: str, viewer: ViewerDep, session: SessionDep) -> Timeline:
+    rows = host_timeline(session, viewer, name)
+    if rows is None:
+        raise HTTPException(404, "no such host")
+    return Timeline(host=name.lower(), reports=[ReportSummary.of(r) for r in rows])
+
+
+class FindingOut(BaseModel):
+    id: int
+    report_id: int
+    host: str
+    generated_at: datetime
+    check_id: str
+    severity: str
+    title: str
+
+
+class FindingList(BaseModel):
+    findings: list[FindingOut]
+    next_before: int | None
+
+
+@router.get("/search/findings", summary="Search findings, newest first")
+def findings(
+    viewer: ViewerDep,
+    session: SessionDep,
+    host: str | None = None,
+    check: str | None = None,
+    severity: Literal["critical", "warning", "info"] | None = None,
+    words: str | None = None,
+    before: int | None = None,
+) -> FindingList:
+    """`host` matches part of a name; every one of `words` must appear in the title."""
+    hits = search_findings(
+        session, viewer, host=host, check=check, severity=severity, words=words,
+        before=before, limit=PAGE_SIZE + 1,
+    )  # fmt: skip
+    hits, next_before = page_of(hits, PAGE_SIZE)
+    return FindingList(findings=[FindingOut(**h.__dict__) for h in hits], next_before=next_before)
