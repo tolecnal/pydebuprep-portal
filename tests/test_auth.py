@@ -220,3 +220,16 @@ def test_logout_when_the_provider_is_down(oidc_client: TestClient, stub: OIDCStu
     resp = oidc_client.post("/logout", data={"csrf_token": token}, follow_redirects=False)
     assert resp.headers["location"] == "/"
     assert oidc_client.get("/", follow_redirects=False).status_code == 303
+
+
+def test_an_id_token_is_not_an_api_token(oidc_client: TestClient, stub: OIDCStub) -> None:
+    token = stub.access_token(typ="ID")
+    assert (
+        oidc_client.get("/api/v1/whoami", headers={"Authorization": f"Bearer {token}"}).status_code
+        == 401
+    )
+    token = stub.access_token(typ="Bearer")
+    assert (
+        oidc_client.get("/api/v1/whoami", headers={"Authorization": f"Bearer {token}"}).status_code
+        == 200
+    )

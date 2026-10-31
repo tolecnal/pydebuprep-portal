@@ -9,7 +9,7 @@
   <tbody>
   {% for host in hosts %}
   <tr>
-    <td>{% if viewer.reads_all %}<a href="/hosts/{{ host.name }}">{{ host.name }}</a>{% else %}{{ host.name }}{% endif %}</td>
+    <td>{% if viewer.reads_all %}<a href="/hosts/{{ host.name | urlpart }}">{{ host.name }}</a>{% else %}{{ host.name }}{% endif %}</td>
     <td>{{ host.os }}</td>
     <td>{{ host.first_seen | utc }}</td>
     <td>{{ host.last_seen | utc }}</td>

@@ -4,7 +4,7 @@
 <h1>{{ host }}</h1>
 <p>Team: {% if team %}<a href="/teams/{{ team }}">{{ team }}</a>{% else %}unassigned{% endif %}. Reports are kept {{ retention }}.</p>
 {% if viewer.is_admin %}
-<form class="filters" method="post" action="/hosts/{{ host }}/retention">
+<form class="filters" method="post" action="/hosts/{{ host | urlpart }}/retention">
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
   <label>Retention
     <select name="mode">
@@ -18,7 +18,7 @@
 </form>
 {% endif %}
 {% if team_choices %}
-<form class="filters" method="post" action="/hosts/{{ host }}/map">
+<form class="filters" method="post" action="/hosts/{{ host | urlpart }}/map">
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
   <label>{% if team %}Move to{% else %}Map to{% endif %}
     <select name="team">{% for name in team_choices %}<option value="{{ name }}"{% if name == team %} selected{% endif %}>{{ name }}</option>{% endfor %}</select>
@@ -26,7 +26,7 @@
   <button type="submit">{% if team %}Move the host and all its reports{% else %}Map{% endif %}</button>
 </form>
 {% if team %}
-<form method="post" action="/hosts/{{ host }}/unmap" class="inline">
+<form method="post" action="/hosts/{{ host | urlpart }}/unmap" class="inline">
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
   <button type="submit">Back to the unassigned queue</button>
 </form>

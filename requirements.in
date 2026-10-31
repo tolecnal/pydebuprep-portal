@@ -12,3 +12,4 @@ itsdangerous
 jinja2
 python-multipart
 setuptools
+jsonschema

@@ -13,7 +13,7 @@
   <tbody>
   {% for row in rows %}
   <tr>
-    <td><a href="/hosts/{{ row.name }}">{{ row.name }}</a></td>
+    <td><a href="/hosts/{{ row.name | urlpart }}">{{ row.name }}</a></td>
     <td><a href="/reports/{{ row.last_report_id }}">#{{ row.last_report_id }}</a></td>
     <td>{{ row.last_generated_at | utc }}</td>
     <td><span class="sev sev-{{ row.worst }}">{{ row.worst }}</span>{% if row.worse %} <span class="flag">worse</span>{% endif %}</td>

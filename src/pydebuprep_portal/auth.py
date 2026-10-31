@@ -201,6 +201,8 @@ async def api_viewer(
             exp={"essential": True},
             sub={"essential": True},
         ).validate(token.claims)
+        if token.claims.get("typ") == "ID":  # an ID token is for the portal's sign-in only
+            raise refused
     except httpx.HTTPError:
         raise HTTPException(503, PROVIDER_DOWN) from None
     except (JoseError, ValueError):

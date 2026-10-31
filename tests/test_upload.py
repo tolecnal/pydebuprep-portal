@@ -226,3 +226,57 @@ def test_a_repeated_upload_records_the_token_use(api: TestClient, token: str, db
     db.expire_all()
     post(api, token, body)
     assert db.query(Report).one().token.last_used_at > first  # type: ignore[operator]
+
+
+def test_uploads_must_match_the_published_report_schema(
+    api: TestClient, token: str, db: Session
+) -> None:
+    data = json.loads(sample_json())
+    data["summary"]["critical"] = -1  # an int, so pydebuprep's loader takes it; the schema doesn't
+    resp = post(api, token, json.dumps(data).encode())
+    assert resp.status_code == 422
+    assert resp.json()["detail"].startswith("does not match the report schema: summary.critical:")
+    assert db.query(Report).count() == 0
+
+
+def test_the_report_schema_is_published(api: TestClient) -> None:
+    from pydebuprep.schema import report_schema
+
+    resp = api.get("/api/v1/schema/report")
+    assert resp.status_code == 200
+    assert resp.json() == report_schema()
+
+
+def test_a_cut_off_upload_is_a_400_not_a_traceback() -> None:
+    import asyncio
+
+    from starlette.requests import ClientDisconnect
+
+    from pydebuprep_portal.ingest import IngestError, read_body
+
+    class Cut:
+        def __init__(self) -> None:
+            self.headers = {"content-encoding": "identity"}
+
+        async def stream(self):  # type: ignore[no-untyped-def]
+            yield b"{"
+            raise ClientDisconnect()
+
+    with pytest.raises(IngestError) as exc:
+        asyncio.run(read_body(Cut(), 1000))  # type: ignore[arg-type]
+    assert exc.value.status == 400
+
+
+def test_a_token_revoked_while_the_body_arrives_stores_nothing(db: Session, token: str) -> None:
+    from datetime import UTC, datetime
+
+    from pydebuprep_portal.ingest import IngestError, store_report
+    from pydebuprep_portal.models import Token
+    from pydebuprep_portal.tokens import revoke_token
+
+    row = db.query(Token).one()
+    revoke_token(db, row.id, datetime.now(UTC), "test")
+    with pytest.raises(IngestError) as exc:
+        store_report(db, sample_json().encode(), row.id, datetime.now(UTC))
+    assert exc.value.status == 401
+    assert db.query(Report).count() == 0
