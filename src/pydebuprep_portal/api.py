@@ -16,6 +16,7 @@ from pydebuprep_portal.access import (
     may_manage_tokens,
     may_read_tokens,
     may_see_queue_hosts,
+    may_set_visibility,
 )
 from pydebuprep_portal.audit import actor_of
 from pydebuprep_portal.auth import api_viewer
@@ -25,6 +26,7 @@ from pydebuprep_portal.mapping import MappingError, map_host, queue, unmap_host
 from pydebuprep_portal.models import Team, Token
 from pydebuprep_portal.queries import (
     ReportRow,
+    delete_report,
     get_report,
     host_timeline,
     list_hosts,
@@ -36,7 +38,7 @@ from pydebuprep_portal.queries import (
 from pydebuprep_portal.rendering import MEDIA_TYPES, render_stored
 from pydebuprep_portal.settings import Settings
 from pydebuprep_portal.settings_store import get_settings
-from pydebuprep_portal.teams import visible_team
+from pydebuprep_portal.teams import create_team, list_teams, set_visibility, visible_team
 from pydebuprep_portal.tokens import (
     MAX_EXPIRES_DAYS,
     MAX_NAME,
@@ -469,4 +471,74 @@ def delete_host_team(name: str, viewer: ViewerDep, session: SessionDep) -> Respo
         unmap_host(session, viewer, name)
     except MappingError as exc:
         raise _mapping_error(exc) from None
+    return Response(status_code=204)
+
+
+class TeamOut(BaseModel):
+    name: str
+    public: bool
+    hosts: int
+    reports: int
+    retention: str
+
+
+class TeamList(BaseModel):
+    teams: list[TeamOut]
+
+
+class NewTeam(BaseModel):
+    name: str
+
+
+class TeamChange(BaseModel):
+    public: bool
+
+
+def _team_out(session: Session, viewer: Viewer, name: str) -> TeamOut:
+    row = next(r for r in list_teams(session, viewer) if r.name == name)
+    return TeamOut(**row.__dict__)
+
+
+@router.get("/teams", summary="Teams you can see")
+def teams(viewer: ViewerDep, session: SessionDep) -> TeamList:
+    """All teams for admins and auditors; your own and the public ones for others."""
+    return TeamList(teams=[TeamOut(**r.__dict__) for r in list_teams(session, viewer)])
+
+
+@router.post("/teams", status_code=201, summary="Create a team ahead of sign-in (admins)")
+def new_team(request: NewTeam, viewer: ViewerDep, session: SessionDep) -> TeamOut:
+    if not viewer.is_admin:
+        raise FORBIDDEN
+    try:
+        team = create_team(session, actor_of(viewer), request.name)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return _team_out(session, viewer, team.name)
+
+
+@router.patch(
+    "/teams/{name}", summary="Make a team public or private (admins, the team's leads)",
+    responses=TEAM_NOT_FOUND,
+)  # fmt: skip
+def change_team(name: str, request: TeamChange, viewer: ViewerDep, session: SessionDep) -> TeamOut:
+    team = _team(session, viewer, name)
+    if not may_set_visibility(viewer, team.name):
+        raise FORBIDDEN
+    set_visibility(session, actor_of(viewer), team, request.public)
+    return _team_out(session, viewer, team.name)
+
+
+@router.delete(
+    "/reports/{report_id}",
+    status_code=204,
+    summary="Delete a report (admins; leads, their team's)",
+    responses=NOT_FOUND,
+)
+def remove_report(report_id: int, viewer: ViewerDep, session: SessionDep) -> Response:
+    try:
+        deleted = delete_report(session, viewer, report_id, actor_of(viewer))
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from None
+    if not deleted:
+        raise HTTPException(404, "no such report")
     return Response(status_code=204)

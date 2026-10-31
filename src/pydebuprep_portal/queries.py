@@ -9,7 +9,8 @@ from typing import Protocol
 from sqlalchemy import ColumnElement, Select, func, or_, select, true
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased, contains_eager, joinedload
 
-from pydebuprep_portal.access import Viewer
+from pydebuprep_portal.access import Viewer, may_delete_reports
+from pydebuprep_portal.audit import record
 from pydebuprep_portal.models import Finding, Host, Report, Team
 
 UNASSIGNED = "unassigned"
@@ -246,3 +247,19 @@ def search_findings(
     if before is not None:
         query = query.where(Finding.id < before)
     return [FindingHit(*row) for row in session.execute(query)]
+
+
+def delete_report(session: Session, viewer: Viewer, report_id: int, actor: str) -> bool:
+    """Delete a report; False when it doesn't exist or VIEWER can't see it, PermissionError
+    when they see it but may not delete it."""
+    report = get_report(session, viewer, report_id)
+    if report is None:
+        return False
+    if not may_delete_reports(viewer, report.team.name if report.team else None):
+        raise PermissionError("your roles don't allow deleting this report")
+    record(session, actor, "report.delete", report.host.name, id=report.id,
+           generated_at=report.generated_at.isoformat(),
+           team=report.team.name if report.team else None)  # fmt: skip
+    session.delete(report)
+    session.commit()
+    return True

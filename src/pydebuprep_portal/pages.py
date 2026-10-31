@@ -12,13 +12,21 @@ from pydebuprep.render import FORMATS
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from pydebuprep_portal.access import Viewer, may_manage_tokens, may_read_tokens, may_see_queue_hosts
+from pydebuprep_portal.access import (
+    Viewer,
+    may_delete_reports,
+    may_manage_tokens,
+    may_read_tokens,
+    may_see_queue_hosts,
+    may_set_visibility,
+)
 from pydebuprep_portal.audit import actor_of
 from pydebuprep_portal.auth import page_viewer
 from pydebuprep_portal.db import get_session
 from pydebuprep_portal.mapping import MappingError, map_host, queue, team_choices, unmap_host
 from pydebuprep_portal.models import Host, Team
 from pydebuprep_portal.queries import (
+    delete_report,
     get_report,
     host_timeline,
     list_hosts,
@@ -34,7 +42,15 @@ from pydebuprep_portal.rendering import (
     render_stored,
 )
 from pydebuprep_portal.security import DOCS_CSP, require_csrf
-from pydebuprep_portal.teams import visible_team
+from pydebuprep_portal.settings_store import get_settings
+from pydebuprep_portal.teams import (
+    create_team,
+    list_teams,
+    retention_text,
+    set_visibility,
+    team_hosts,
+    visible_team,
+)
 from pydebuprep_portal.templating import error_page, page, templates
 from pydebuprep_portal.tokens import create_token, list_tokens, revoke_token, token_request
 
@@ -86,7 +102,23 @@ def report_page(
     report = get_report(session, viewer, report_id)
     if report is None:
         return _not_found(request)
-    return page(request, "report.html", viewer, report=report, formats=FORMATS)
+    may_delete = may_delete_reports(viewer, report.team.name if report.team else None)
+    return page(
+        request, "report.html", viewer, report=report, formats=FORMATS, may_delete=may_delete
+    )
+
+
+@router.post("/reports/{report_id}/delete", dependencies=[Depends(require_csrf)])
+def delete_report_page(
+    request: Request, report_id: int, viewer: ViewerDep, session: SessionDep
+) -> Response:
+    try:
+        deleted = delete_report(session, viewer, report_id, actor_of(viewer))
+    except PermissionError:
+        return _forbidden(request)
+    if not deleted:
+        return _not_found(request)
+    return RedirectResponse("/", status_code=303)
 
 
 @router.get("/reports/{report_id}/html")
@@ -299,8 +331,49 @@ def _team_page(
     tokens = list_tokens(session, team.id) if may_read_tokens(viewer, team.name) else None
     return page(
         request, "team.html", viewer, status_code, team=team, tokens=tokens,
-        may_manage=may_manage_tokens(viewer, "team", team.name), **context,
+        may_manage=may_manage_tokens(viewer, "team", team.name),
+        may_visibility=may_set_visibility(viewer, team.name), hosts=team_hosts(session, team),
+        retention=retention_text(team, get_settings(session).retention_days), **context,
     )  # fmt: skip
+
+
+def _teams_page(
+    request: Request, viewer: Viewer, session: Session, status_code: int = 200, **context: object
+) -> HTMLResponse:
+    rows = list_teams(session, viewer)
+    return page(request, "teams.html", viewer, status_code, teams=rows, **context)
+
+
+@router.get("/teams", response_class=HTMLResponse)
+def teams_page(request: Request, viewer: ViewerDep, session: SessionDep) -> HTMLResponse:
+    return _teams_page(request, viewer, session)
+
+
+@router.post("/teams", dependencies=[Depends(require_csrf)])
+def create_team_page(
+    request: Request, viewer: ViewerDep, session: SessionDep, name: Annotated[str, Form()] = ""
+) -> Response:
+    if not viewer.is_admin:
+        return _forbidden(request)
+    try:
+        team = create_team(session, actor_of(viewer), name)
+    except ValueError as exc:
+        return _teams_page(request, viewer, session, 422, error=str(exc), form_name=name)
+    return RedirectResponse(f"/teams/{team.name}", status_code=303)
+
+
+@router.post("/teams/{name}/visibility", dependencies=[Depends(require_csrf)])
+def team_visibility_page(
+    request: Request, name: str, viewer: ViewerDep, session: SessionDep,
+    public: Annotated[str, Form()] = "",
+) -> Response:  # fmt: skip
+    team = visible_team(session, viewer, name)
+    if team is None:
+        return _team_not_found(request)
+    if not may_set_visibility(viewer, team.name):
+        return _forbidden(request)
+    set_visibility(session, actor_of(viewer), team, public == "1")
+    return RedirectResponse(f"/teams/{team.name}", status_code=303)
 
 
 @router.get("/teams/{name}", response_class=HTMLResponse)

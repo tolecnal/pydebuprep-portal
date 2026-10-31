@@ -21,5 +21,11 @@
 <p class="downloads">Download:
 {% for fmt in formats %}<a href="/reports/{{ report.id }}/download/{{ fmt }}">{{ fmt }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
 </p>
+{% if may_delete %}
+<form method="post" action="/reports/{{ report.id }}/delete" class="inline">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <button type="submit">Delete this report</button>
+</form>
+{% endif %}
 <iframe sandbox="" src="/reports/{{ report.id }}/html" title="The report" class="report"></iframe>
 {% endblock %}

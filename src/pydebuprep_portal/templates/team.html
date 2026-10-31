@@ -3,6 +3,17 @@
 {% block main %}
 <h1>Team {{ team.name }}</h1>
 <p>{% if team.public %}Public: everyone signed in reads its reports.{% else %}Private: its members, admins and auditors read its reports.{% endif %}</p>
+{% if may_visibility %}
+<form method="post" action="/teams/{{ team.name }}/visibility" class="inline">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <input type="hidden" name="public" value="{{ '0' if team.public else '1' }}">
+  <button type="submit">Make it {{ "private" if team.public else "public" }}</button>
+</form>
+{% endif %}
+<p>Reports are kept {{ retention }}.</p>
+<h2>Hosts</h2>
+{% if hosts %}<ul class="hosts">{% for host in hosts %}<li><a href="/hosts/{{ host }}">{{ host }}</a></li>{% endfor %}</ul>
+{% else %}<p class="empty">No hosts yet.</p>{% endif %}
 {% if tokens is not none %}
 <h2>Upload tokens</h2>
 {% if new_token %}
