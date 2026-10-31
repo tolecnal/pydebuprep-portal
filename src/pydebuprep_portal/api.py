@@ -17,13 +17,25 @@ from pydebuprep_portal.access import (
     may_change_settings,
     may_manage_tokens,
     may_read_audit,
+    may_read_configs,
     may_read_tokens,
     may_set_retention,
     may_set_visibility,
 )
 from pydebuprep_portal.audit import actor_of, list_audit
 from pydebuprep_portal.auth import api_viewer
-from pydebuprep_portal.configs import etag, newest, render_served
+from pydebuprep_portal.configs import (
+    ConfigError,
+    create_config,
+    etag,
+    get_config,
+    get_version,
+    list_configs,
+    newest,
+    render_served,
+    save_config,
+    served_url,
+)
 from pydebuprep_portal.db import get_session
 from pydebuprep_portal.ingest import IngestError, check_headers, read_body, store_report
 from pydebuprep_portal.mapping import MappingError, map_host, queue, queue_visible, unmap_host
@@ -44,6 +56,7 @@ from pydebuprep_portal.settings import Settings
 from pydebuprep_portal.settings_store import get_settings, update_settings
 from pydebuprep_portal.teams import (
     create_team,
+    get_team,
     list_teams,
     set_retention,
     set_visibility,
@@ -689,3 +702,157 @@ def host_config(
         media_type="application/yaml; charset=utf-8",
         headers={"ETag": tag, "Cache-Control": "no-cache"},
     )
+
+
+class ConfigSummary(BaseModel):
+    name: str
+    version: int
+    updated_at: datetime
+    updated_by: str
+    url: str = Field(description="What hosts pass to pydebuprep --config")
+
+
+class ConfigList(BaseModel):
+    configs: list[ConfigSummary]
+
+
+class NewConfig(BaseModel):
+    name: str
+    values: dict[str, Any] | None = Field(
+        None, description="Like the config file's report, logs and checks; default: none"
+    )
+
+
+class ConfigValues(BaseModel):
+    values: Any = Field(description="Like the config file's report, logs and checks")
+
+
+class CreatedConfig(BaseModel):
+    name: str
+    version: int
+    url: str
+
+
+class SavedConfig(BaseModel):
+    version: int
+    changed: bool
+
+
+class VersionOut(BaseModel):
+    version: int
+    created_at: datetime
+    created_by: str
+
+
+class ConfigDetail(BaseModel):
+    team: str
+    name: str
+    url: str
+    version: int
+    values: dict[str, Any]
+    versions: list[VersionOut]
+
+
+CONFIG_ERRORS: dict[int | str, dict[str, Any]] = {
+    403: {"description": "Your roles only let you read it"},
+    404: {"description": "No such team or config, or not visible to you"},
+    422: {"description": "The config isn't one hosts would accept; detail lists why"},
+}
+
+
+def _config_error(exc: ConfigError) -> HTTPException:
+    return HTTPException(exc.status, exc.errors if exc.status == 422 else exc.detail)
+
+
+def _readable(session: Session, viewer: Viewer, team: str, name: str) -> Config:
+    config = get_config(session, viewer, team, name)
+    if config is None:
+        raise HTTPException(404, "no such config, or you can't see it")
+    return config
+
+
+@router.get("/teams/{team}/configs", summary="A team's configs", responses=CONFIG_ERRORS)
+def team_configs(request: Request, team: str, viewer: ViewerDep, session: SessionDep) -> ConfigList:
+    if get_team(session, team) is None or not may_read_configs(viewer, team):
+        raise HTTPException(404, "no such team, or you can't see its configs")
+    settings = request.app.state.settings
+    return ConfigList(
+        configs=[
+            ConfigSummary(
+                name=row.name,
+                version=row.version,
+                updated_at=row.updated_at,
+                updated_by=row.updated_by,
+                url=served_url(settings, team, row.name),
+            )
+            for row in list_configs(session, viewer)
+            if row.team == team
+        ]
+    )
+
+
+@router.post(
+    "/teams/{team}/configs", status_code=201, summary="Create a config", responses=CONFIG_ERRORS
+)
+def new_config(
+    request: Request, team: str, body: NewConfig, viewer: ViewerDep, session: SessionDep
+) -> CreatedConfig:
+    settings = request.app.state.settings
+    try:
+        config = create_config(session, viewer, settings, team, body.name, body.values)
+    except ConfigError as exc:
+        raise _config_error(exc) from None
+    return CreatedConfig(name=config.name, version=1, url=served_url(settings, team, config.name))
+
+
+@router.get("/teams/{team}/configs/{name}", summary="A config", responses=CONFIG_ERRORS)
+def config_detail(
+    request: Request, team: str, name: str, viewer: ViewerDep, session: SessionDep
+) -> ConfigDetail:
+    config = _readable(session, viewer, team, name)
+    current = newest(config)
+    return ConfigDetail(
+        team=team,
+        name=name,
+        url=served_url(request.app.state.settings, team, name),
+        version=current.version,
+        values=current.values,
+        versions=[VersionOut.model_validate(v, from_attributes=True) for v in config.versions],
+    )
+
+
+@router.put(
+    "/teams/{team}/configs/{name}",
+    summary="Save a config as its next version",
+    responses=CONFIG_ERRORS,
+)
+def put_config(
+    request: Request, team: str, name: str, body: ConfigValues, viewer: ViewerDep,
+    session: SessionDep,
+) -> SavedConfig:  # fmt: skip
+    """Saving what it has already makes no new version (`changed` false)."""
+    try:
+        saved = save_config(session, viewer, request.app.state.settings, team, name, body.values)
+    except ConfigError as exc:
+        raise _config_error(exc) from None
+    if saved is None:
+        return SavedConfig(version=newest(_readable(session, viewer, team, name)).version,
+                           changed=False)  # fmt: skip
+    return SavedConfig(version=saved.version, changed=True)
+
+
+@router.get(
+    "/teams/{team}/configs/{name}/versions/{number}",
+    summary="A config version, as hosts got it",
+    response_class=Response,
+    responses={200: {"content": {"application/yaml": {}}}, **CONFIG_ERRORS},
+)
+def config_version(
+    request: Request, team: str, name: str, number: int, viewer: ViewerDep, session: SessionDep
+) -> Response:
+    config = _readable(session, viewer, team, name)
+    version = get_version(config, number)
+    if version is None:
+        raise HTTPException(404, "no such version")
+    text = render_served(request.app.state.settings, config, version)
+    return Response(text, media_type="application/yaml; charset=utf-8")

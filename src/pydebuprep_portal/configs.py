@@ -59,9 +59,14 @@ def _validated(settings: Settings, team: str, name: str, values: object) -> dict
 
 
 def create_config(
-    session: Session, viewer: Viewer, settings: Settings, team_name: str, name: str
+    session: Session,
+    viewer: Viewer,
+    settings: Settings,
+    team_name: str,
+    name: str,
+    values: object = None,
 ) -> Config:
-    """A new config of TEAM_NAME, with pydebuprep's defaults as version 1."""
+    """A new config of TEAM_NAME; version 1 is VALUES, by default pydebuprep's defaults."""
     team = _editable_team(session, viewer, team_name)
     name = name.strip()
     if not TEAM_NAME.fullmatch(name):
@@ -70,9 +75,10 @@ def create_config(
         )
     if session.scalar(select(Config.id).where(Config.team_id == team.id, Config.name == name)):
         raise ConfigError(422, f"team {team.name} already has a config {name}")
+    first = {} if values is None else _validated(settings, team.name, name, values)
     actor, now = actor_of(viewer), datetime.now(UTC)
     config = Config(team_id=team.id, name=name, created_at=now, created_by=actor)
-    config.versions.append(ConfigVersion(version=1, values={}, created_at=now, created_by=actor))
+    config.versions.append(ConfigVersion(version=1, values=first, created_at=now, created_by=actor))
     session.add(config)
     record(session, actor, "config.create", f"{team.name}/{name}")
     session.commit()
