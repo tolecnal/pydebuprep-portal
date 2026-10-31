@@ -1162,8 +1162,8 @@ pydantic-core==2.50.2 \
     --hash=sha256:f81df206b937d0dca5efb38c25fc99037d82dbcd3740e34c3f81997d2322ac1c \
     --hash=sha256:fd9aa71a800c87c0f7ab53fa38009169a23a82c685989626ca74a4bd483e1b67
     # via pydantic
-pydebuprep @ https://github.com/tolecnal/pydebuprep/archive/refs/tags/v0.6.0.tar.gz \
-    --hash=sha256:69a474369240da97adb761a986077b4c3d156378cd96fc3aef35fd42e7aff554
+pydebuprep @ https://github.com/tolecnal/pydebuprep/archive/refs/tags/v0.7.0.tar.gz \
+    --hash=sha256:0100e50dbec465b4e1e430c04c51d16d3eca953da70f0c970dfafe266cbe1ec1
     # via -r requirements.in
 pygments==2.21.0 \
     --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9 \
