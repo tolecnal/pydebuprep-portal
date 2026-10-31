@@ -83,7 +83,15 @@ def test_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_smoke_script_uploads_with_the_cli() -> None:
     text = (ROOT / "scripts/smoke.sh").read_text()
-    assert "manage create-token" in text
+    assert "manage create-token" in text and "--team smoke" in text
     assert "upload --allow-http" in text
     assert "docker compose" in text and "down -v" in text
     assert "smoke: ok" in text
+
+
+def test_readme_covers_teams() -> None:
+    text = (ROOT / "README.md").read_text()
+    for topic in ("pydebuprep-team-", "-lead", "unassigned", "keep forever", "audit log",
+                  "only admins map hosts", "host token", "team token"):  # fmt: skip
+        assert topic in text, topic
+    assert "PORTAL_MAX_UPLOAD_BYTES" not in text

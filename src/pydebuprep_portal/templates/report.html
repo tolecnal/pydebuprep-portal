@@ -5,7 +5,11 @@
 {% if report.config_stale %}
 <p class="notice">This report ran with a saved copy of its config: it may not be the latest.</p>
 {% endif %}
+{% if report.token_team %}
+<p class="notice">This report was sent with team {{ report.token_team.name }}'s token; the host belongs to {{ report.team.name if report.team else "no team" }}.</p>
+{% endif %}
 <dl class="facts">
+  <dt>Team</dt><dd>{{ report.team.name if report.team else "unassigned" }}</dd>
   <dt>Generated</dt><dd>{{ report.generated_at | utc }}</dd>
   <dt>Received</dt><dd>{{ report.received_at | utc }}</dd>
   <dt>OS</dt><dd>{{ report.os_id }} {{ report.os_version }} ({{ report.codename }})</dd>
@@ -17,5 +21,11 @@
 <p class="downloads">Download:
 {% for fmt in formats %}<a href="/reports/{{ report.id }}/download/{{ fmt }}">{{ fmt }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
 </p>
+{% if may_delete %}
+<form method="post" action="/reports/{{ report.id }}/delete" class="inline">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <button type="submit">Delete this report</button>
+</form>
+{% endif %}
 <iframe sandbox="" src="/reports/{{ report.id }}/html" title="The report" class="report"></iframe>
 {% endblock %}

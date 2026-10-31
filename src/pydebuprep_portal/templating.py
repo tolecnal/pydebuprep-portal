@@ -37,8 +37,17 @@ def page(
     context |= {"viewer": viewer, "csrf_field": CSRF_FIELD}
     if viewer is not None:
         context["csrf_token"] = csrf_token(request)
+        context["show_queue"] = viewer.reads_all or (viewer.leads and _leads_map(request))
     return templates.TemplateResponse(request, template, context, status_code=status_code)
 
 
 def error_page(request: Request, status_code: int, title: str, message: str) -> HTMLResponse:
     return page(request, "error.html", None, status_code, title=title, message=message)
+
+
+def _leads_map(request: Request) -> bool:
+    """Whether leads may map hosts now: they see the queue only then."""
+    from pydebuprep_portal.settings_store import get_settings
+
+    with request.app.state.sessionmaker() as session:
+        return not get_settings(session).only_admins_map

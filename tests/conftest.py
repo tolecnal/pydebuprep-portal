@@ -25,7 +25,7 @@ from oidc_stub import OIDCStub
 from pydebuprep_portal.app import create_app
 from pydebuprep_portal.db import make_engine, make_sessionmaker, migrations_config
 from pydebuprep_portal.ingest import store_report
-from pydebuprep_portal.models import Report
+from pydebuprep_portal.models import Report, Team
 from pydebuprep_portal.settings import Settings, load_settings
 from pydebuprep_portal.tokens import create_token
 from sample import sample_json
@@ -57,7 +57,7 @@ def client() -> Iterator[TestClient]:
 
 # --- database ---------------------------------------------------------------------
 
-TABLES = ("hosts", "tokens", "reports", "findings")
+TABLES = ("hosts", "tokens", "reports", "findings", "teams", "audit_log")
 
 
 @pytest.fixture(scope="session")
@@ -83,6 +83,12 @@ def engine(db_url: str) -> Iterator[Engine]:
 def db(engine: Engine) -> Iterator[Session]:
     with engine.begin() as conn:
         conn.execute(text(f"TRUNCATE {', '.join(TABLES)} RESTART IDENTITY CASCADE"))
+        conn.execute(
+            text(
+                "UPDATE settings SET retention_days = 365, only_admins_map = false, "
+                "max_upload_bytes = 10485760"
+            )
+        )
     with make_sessionmaker(engine)() as session:
         yield session
 
@@ -119,7 +125,7 @@ def api(make_client: Callable[..., TestClient]) -> TestClient:
 
 @pytest.fixture
 def token(db: Session) -> str:
-    return create_token(db, kind="global", name="test", created_by="test", expires_at=None)[1]
+    return create_token(db, kind="global", name="test", actor="test", expires_at=None)[1]
 
 
 @dataclass
@@ -189,7 +195,7 @@ def csrf_of(client: TestClient) -> str:
 @pytest.fixture
 def add_report(db: Session) -> Callable[..., Report]:
     """Store a sample report (keyword arguments as for sample.sample_json)."""
-    stored_token = create_token(db, kind="global", name="fixture", created_by="test",
+    stored_token = create_token(db, kind="global", name="fixture", actor="test",
                                 expires_at=None)[0]  # fmt: skip
     received = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
 
@@ -226,3 +232,32 @@ def bearer(stub: OIDCStub) -> Callable[..., dict[str, str]]:
         return {"Authorization": f"Bearer {stub.access_token(groups=list(groups))}"}
 
     return headers
+
+
+def set_upload_limit(db: Session, limit: int) -> None:
+    from pydebuprep_portal.settings_store import get_settings, update_settings
+
+    current = get_settings(db)
+    update_settings(db, "test", retention_days=current.retention_days,
+                    only_admins_map=current.only_admins_map, max_upload_bytes=limit)  # fmt: skip
+
+
+# --- teams --------------------------------------------------------------------------
+
+
+def make_team(db: Session, name: str, public: bool = False) -> Team:
+    team = db.query(Team).filter_by(name=name).one_or_none()
+    if team is None:
+        team = Team(name=name, public=public, keep_forever=False,
+                    created_at=datetime.now(UTC), created_by="test")  # fmt: skip
+        db.add(team)
+    team.public = public
+    db.commit()
+    return team
+
+
+def assign(db: Session, report: Report, team: Team | None) -> Report:
+    """Put a report and its host in TEAM (None: the queue), as mapping would."""
+    report.team_id = report.host.team_id = None if team is None else team.id
+    db.commit()
+    return report

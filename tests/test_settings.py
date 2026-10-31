@@ -16,7 +16,7 @@ def test_minimal_env_loads() -> None:
     assert s.base_url == "https://portal.test"
     assert s.oidc_groups_claim == "groups"
     assert s.group_prefix == "pydebuprep-"
-    assert s.max_upload_bytes == 10 * 1024 * 1024
+    assert not hasattr(s, "max_upload_bytes")  # an admin setting since step 3
     assert s.oidc_audience == "portal"
     assert s.allow_http is False
 
@@ -28,15 +28,9 @@ def test_optional_settings() -> None:
             "PORTAL_OIDC_GROUPS_CLAIM": "roles",
             "PORTAL_OIDC_AUDIENCE": "api",
             "PORTAL_GROUP_PREFIX": "pdp-",
-            "PORTAL_MAX_UPLOAD_BYTES": "1000",
         }
     )
-    assert (s.oidc_groups_claim, s.oidc_audience, s.group_prefix, s.max_upload_bytes) == (
-        "roles",
-        "api",
-        "pdp-",
-        1000,
-    )
+    assert (s.oidc_groups_claim, s.oidc_audience, s.group_prefix) == ("roles", "api", "pdp-")
 
 
 @pytest.mark.parametrize("name", [n for n in BASE_ENV])
@@ -91,12 +85,6 @@ def test_base_url_must_be_https_unless_allow_http() -> None:
 def test_base_url_must_be_a_url(url: str) -> None:
     with pytest.raises(SettingsError, match="PORTAL_BASE_URL"):
         load_settings(BASE_ENV | {"PORTAL_BASE_URL": url})
-
-
-@pytest.mark.parametrize("value", ["0", "-1", "ten"])
-def test_max_upload_bytes_must_be_positive_int(value: str) -> None:
-    with pytest.raises(SettingsError, match="PORTAL_MAX_UPLOAD_BYTES"):
-        load_settings(BASE_ENV | {"PORTAL_MAX_UPLOAD_BYTES": value})
 
 
 @pytest.mark.parametrize(

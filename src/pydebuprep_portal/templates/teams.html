@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Teams — pydebuprep portal{% endblock %}
+{% block main %}
+<h1>Teams</h1>
+<p class="empty">A team appears when someone signs in with its <code>pydebuprep-team-&lt;team&gt;</code> group. New teams are private.</p>
+{% if error %}<p class="notice">{{ error }}</p>{% endif %}
+{% if viewer.is_admin %}
+<form class="filters" method="post" action="/teams">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <label>New team <input name="name" maxlength="63" required value="{{ form_name or '' }}"></label>
+  <button type="submit">Create</button>
+</form>
+{% endif %}
+{% if teams %}
+<table>
+  <thead><tr><th>Team</th><th>Visibility</th><th>Hosts</th><th>Reports</th><th>Retention</th></tr></thead>
+  <tbody>
+  {% for team in teams %}
+  <tr>
+    <td><a href="/teams/{{ team.name }}">{{ team.name }}</a></td>
+    <td>{{ "public" if team.public else "private" }}</td>
+    <td class="num">{{ team.hosts }}</td><td class="num">{{ team.reports }}</td>
+    <td>{{ team.retention }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No teams to show.</p>
+{% endif %}
+{% endblock %}

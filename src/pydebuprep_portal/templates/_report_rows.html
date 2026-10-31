@@ -1,12 +1,13 @@
 {% if rows %}
 <table class="reports">
-  <thead><tr><th>Report</th><th>Host</th><th>Generated</th><th>Received</th><th>Worst</th>
+  <thead><tr><th>Report</th><th>Host</th><th>Team</th><th>Generated</th><th>Received</th><th>Worst</th>
     <th>Critical</th><th>Warning</th><th>Info</th><th>Errors</th><th>OS</th></tr></thead>
   <tbody>
   {% for row in rows %}
   <tr>
     <td><a href="/reports/{{ row.id }}">#{{ row.id }}</a>{% if row.config_stale %} <span class="flag" title="Ran with a saved copy of its config">stale config</span>{% endif %}</td>
     <td><a href="/hosts/{{ row.host }}">{{ row.host }}</a></td>
+    <td>{{ row.team or "unassigned" }}{% if row.flagged_team %} <span class="flag" title="Sent with team {{ row.flagged_team }}'s token">flagged</span>{% endif %}</td>
     <td>{{ row.generated_at | utc }}</td>
     <td>{{ row.received_at | utc }}</td>
     <td><span class="sev sev-{{ row.worst }}">{{ row.worst }}</span></td>
@@ -18,8 +19,8 @@
   </tbody>
 </table>
 {% if next_before %}
-<p class="more"><a href="/?{{ {'before': next_before, 'worst': worst} | urlencode_set }}">Older reports</a></p>
+<p class="more"><a href="/?{{ {'before': next_before, 'worst': worst, 'team': team, 'flagged': '1' if flagged else None} | urlencode_set }}">Older reports</a></p>
 {% endif %}
 {% else %}
-<p class="empty">No reports to show.{% if not viewer.reads_all %} Reports are visible to admins and auditors until teams arrive.{% endif %}</p>
+<p class="empty">No reports to show.</p>
 {% endif %}

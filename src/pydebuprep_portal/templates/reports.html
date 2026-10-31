@@ -10,6 +10,14 @@
       {% endfor %}
     </select>
   </label>
+  <label>Team
+    <select name="team">
+      <option value="">any</option>
+      {% if viewer.reads_all %}<option value="unassigned"{% if team == "unassigned" %} selected{% endif %}>unassigned</option>{% endif %}
+      {% for name in teams %}<option value="{{ name }}"{% if team == name %} selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select>
+  </label>
+  {% if viewer.is_admin %}<label><input type="checkbox" name="flagged" value="1"{% if flagged %} checked{% endif %}> Sent with another team's token</label>{% endif %}
   <button type="submit">Filter</button>
 </form>
 <div id="rows">

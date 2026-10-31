@@ -157,7 +157,13 @@ def test_api_bearer(oidc_client: TestClient, stub: OIDCStub, case: str) -> None:
     headers = {"Authorization": f"Bearer {tokens[case]}"} if case in tokens else {}
     resp = oidc_client.get("/api/v1/whoami", headers=headers)
     if case == "valid":
-        assert resp.json() == {"subject": "user-1", "name": "Ada Admin", "roles": ["admin"]}
+        assert resp.json() == {
+            "subject": "user-1",
+            "name": "Ada Admin",
+            "roles": ["admin"],
+            "teams": [],
+            "leads": [],
+        }
     else:
         assert resp.status_code == 401
         assert resp.headers["WWW-Authenticate"] == "Bearer"

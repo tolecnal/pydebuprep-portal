@@ -9,8 +9,11 @@ from datetime import UTC, datetime
 
 from alembic import command
 
+from pydebuprep_portal.access import valid_team_name
 from pydebuprep_portal.db import make_engine, make_sessionmaker, migrations_config
+from pydebuprep_portal.retention import expire_reports
 from pydebuprep_portal.settings import SettingsError, load_settings
+from pydebuprep_portal.teams import create_team, get_team
 from pydebuprep_portal.tokens import create_token, token_request
 
 
@@ -18,9 +21,12 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m pydebuprep_portal.manage")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("migrate", help="bring the database schema up to date")
-    token = sub.add_parser("create-token", help="create a global upload token and print it")
+    sub.add_parser("expire", help="delete expired reports now (the portal does it daily)")
+    token = sub.add_parser("create-token", help="create an upload token and print it")
     token.add_argument("name", help="what the token is for")
     token.add_argument("--expires-days", type=int, help="days until it expires (default: never)")
+    token.add_argument("--team", help="make a team token of TEAM (created if missing)")
+    token.add_argument("--host", help="with --team: a host token for this one host")
     return parser
 
 
@@ -33,6 +39,10 @@ def main(argv: list[str] | None = None) -> int:
             name, expires = token_request(args.name, args.expires_days, datetime.now(UTC))
         except ValueError as exc:
             parser.error(str(exc))
+        if args.host and not args.team:
+            parser.error("--host needs --team: a host token belongs to a team")
+        if args.team and not valid_team_name(args.team):
+            parser.error(f"not a team name: {args.team!r}")
     try:
         settings = load_settings(os.environ)
     except SettingsError as exc:
@@ -43,10 +53,22 @@ def main(argv: list[str] | None = None) -> int:
         print("Database schema is up to date.")
         return 0
     engine = make_engine(settings.database_url)
+    if args.command == "expire":
+        with make_sessionmaker(engine)() as session:
+            deleted = expire_reports(session, datetime.now(UTC))
+        engine.dispose()
+        print(f"Expired {deleted} reports.")
+        return 0
     with make_sessionmaker(engine)() as session:
+        team_id = None
+        if args.team:
+            team = get_team(session, args.team) or create_team(session, "manage", args.team)
+            team_id = team.id
+        kind = "host" if args.host else "team" if args.team else "global"
         _, plain = create_token(
-            session, kind="global", name=name, created_by="manage", expires_at=expires
-        )
+            session, kind=kind, name=name, actor="manage", expires_at=expires,
+            team_id=team_id, host_name=args.host,
+        )  # fmt: skip
     engine.dispose()
     print(plain)
     return 0

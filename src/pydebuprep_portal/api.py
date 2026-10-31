@@ -8,15 +8,28 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from pydebuprep.render import FORMATS
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from pydebuprep_portal.access import Viewer
+from pydebuprep_portal.access import (
+    Viewer,
+    may_change_settings,
+    may_manage_tokens,
+    may_read_audit,
+    may_read_tokens,
+    may_set_retention,
+    may_set_visibility,
+)
+from pydebuprep_portal.audit import actor_of, list_audit
 from pydebuprep_portal.auth import api_viewer
 from pydebuprep_portal.db import get_session
 from pydebuprep_portal.ingest import IngestError, check_headers, read_body, store_report
+from pydebuprep_portal.mapping import MappingError, map_host, queue, queue_visible, unmap_host
+from pydebuprep_portal.models import Host, Team, Token
 from pydebuprep_portal.queries import (
     ReportRow,
+    delete_report,
     get_report,
     host_timeline,
     list_hosts,
@@ -27,6 +40,14 @@ from pydebuprep_portal.queries import (
 )
 from pydebuprep_portal.rendering import MEDIA_TYPES, render_stored
 from pydebuprep_portal.settings import Settings
+from pydebuprep_portal.settings_store import get_settings, update_settings
+from pydebuprep_portal.teams import (
+    create_team,
+    list_teams,
+    set_retention,
+    set_visibility,
+    visible_team,
+)
 from pydebuprep_portal.tokens import (
     MAX_EXPIRES_DAYS,
     MAX_NAME,
@@ -73,11 +94,12 @@ async def upload(
     except TokenError as exc:
         raise HTTPException(401, str(exc), headers={"WWW-Authenticate": "Bearer"}) from None
     token_id = token.id
+    limit = (await run_in_threadpool(get_settings, session)).max_upload_bytes
     # Hand the connection back while the body arrives, however slowly it comes.
     await run_in_threadpool(session.rollback)
     try:
-        check_headers(request, settings.max_upload_bytes)
-        body = await read_body(request, settings.max_upload_bytes)
+        check_headers(request, limit)
+        body = await read_body(request, limit)
         report, created = await run_in_threadpool(store_report, session, body, token_id, now)
     except IngestError as exc:
         raise HTTPException(exc.status, exc.detail) from None
@@ -89,11 +111,19 @@ class WhoAmI(BaseModel):
     subject: str
     name: str
     roles: list[str]
+    teams: list[str]
+    leads: list[str]
 
 
 @router.get("/whoami", summary="Who the access token belongs to")
 def whoami(viewer: Annotated[Viewer, Depends(api_viewer)]) -> WhoAmI:
-    return WhoAmI(subject=viewer.subject, name=viewer.name, roles=sorted(viewer.roles))
+    return WhoAmI(
+        subject=viewer.subject,
+        name=viewer.name,
+        roles=sorted(viewer.roles),
+        teams=sorted(viewer.teams),
+        leads=sorted(viewer.leads),
+    )
 
 
 PAGE_SIZE = 50
@@ -118,6 +148,8 @@ class ReportSummary(BaseModel):
     os: str
     kernel: str
     config_stale: bool
+    team: str | None = Field(description="None: the unassigned queue")
+    flagged_team: str | None = Field(description="Sent with this other team's token")
 
     @classmethod
     def of(cls, row: ReportRow) -> ReportSummary:
@@ -144,10 +176,16 @@ def reports(
     session: SessionDep,
     worst: Worst | None = None,
     host: str | None = None,
+    team: str | None = None,
+    flagged: bool = False,
     before: int | None = None,
 ) -> ReportList:
-    """Fifty at a time; pass `next_before` as `before` for the next page."""
-    rows = list_reports(session, viewer, worst=worst, host=host, before=before, limit=PAGE_SIZE + 1)
+    """Fifty at a time; pass `next_before` as `before` for the next page. `team` is a team's
+    name or `unassigned`; `flagged` keeps reports sent with another team's token."""
+    rows = list_reports(
+        session, viewer, worst=worst, host=host, team=team, flagged=flagged, before=before,
+        limit=PAGE_SIZE + 1,
+    )  # fmt: skip
     rows, next_before = page_of(rows, PAGE_SIZE)
     return ReportList(reports=[ReportSummary.of(r) for r in rows], next_before=next_before)
 
@@ -260,11 +298,18 @@ class TokenOut(BaseModel):
     kind: str
     name: str
     public_id: str
+    team: str | None
+    host_name: str | None
     created_by: str
     created_at: datetime
     expires_at: datetime | None
     revoked_at: datetime | None
     last_used_at: datetime | None
+
+    @classmethod
+    def of(cls, token: Token) -> TokenOut:
+        fields = {f: getattr(token, f) for f in cls.model_fields if f != "team"}
+        return cls(**fields, team=token.team.name if token.team else None)
 
 
 class TokenList(BaseModel):
@@ -276,51 +321,323 @@ class TokenRequest(BaseModel):
     expires_days: int | None = Field(None, ge=1, le=MAX_EXPIRES_DAYS)
 
 
+class TeamTokenRequest(TokenRequest):
+    kind: Literal["team", "host"]
+    host_name: str | None = Field(None, description="For a host token: the one host it is for")
+
+
 class NewToken(BaseModel):
     id: int
     token: str = Field(description="Shown this once; the portal keeps only its hash")
 
 
 FORBIDDEN = HTTPException(403, "your roles don't allow this")
-TOKEN_FIELDS = tuple(TokenOut.model_fields)
+NO_TEAM = HTTPException(404, "no such team")
+TEAM_NOT_FOUND: dict[int | str, dict[str, Any]] = {
+    404: {"description": "No such team, or not visible to you"}
+}
 
 
-@router.get("/tokens", summary="Upload tokens (admins and auditors)")
+def _new_token(
+    session: Session, viewer: Viewer, request: TokenRequest, kind: str,
+    team_id: int | None = None, host_name: str | None = None,
+) -> NewToken:  # fmt: skip
+    try:
+        name, expires = token_request(request.name, request.expires_days, datetime.now(UTC))
+        token, plain = create_token(
+            session, kind=kind, name=name, actor=actor_of(viewer), expires_at=expires,
+            team_id=team_id, host_name=host_name,
+        )  # fmt: skip
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return NewToken(id=token.id, token=plain)
+
+
+@router.get("/tokens", summary="Every upload token (admins and auditors)")
 def tokens(viewer: ViewerDep, session: SessionDep) -> TokenList:
-    if not viewer.reads_all:
+    if not may_read_tokens(viewer, None):
         raise FORBIDDEN
-    return TokenList(
-        tokens=[TokenOut(**{f: getattr(t, f) for f in TOKEN_FIELDS}) for t in list_tokens(session)]
-    )
+    return TokenList(tokens=[TokenOut.of(t) for t in list_tokens(session)])
 
 
 @router.post("/tokens", status_code=201, summary="Create a global upload token (admins)")
 def new_token(request: TokenRequest, viewer: ViewerDep, session: SessionDep) -> NewToken:
-    if not viewer.is_admin:
+    if not may_manage_tokens(viewer, "global", None):
         raise FORBIDDEN
-    try:
-        name, expires = token_request(request.name, request.expires_days, datetime.now(UTC))
-    except ValueError as exc:
-        raise HTTPException(422, str(exc)) from None
-    token, plain = create_token(
-        session,
-        kind="global",
-        name=name,
-        created_by=f"{viewer.name} <{viewer.subject}>",
-        expires_at=expires,
-    )
-    return NewToken(id=token.id, token=plain)
+    return _new_token(session, viewer, request, "global")
 
 
 @router.delete(
     "/tokens/{token_id}",
     status_code=204,
-    summary="Revoke an upload token (admins)",
+    summary="Revoke any upload token (admins)",
     responses={404: {"description": "No such token"}},
 )
 def delete_token(token_id: int, viewer: ViewerDep, session: SessionDep) -> Response:
     if not viewer.is_admin:
         raise FORBIDDEN
-    if not revoke_token(session, token_id, datetime.now(UTC)):
+    if not revoke_token(session, token_id, datetime.now(UTC), actor_of(viewer)):
         raise HTTPException(404, "no such token")
     return Response(status_code=204)
+
+
+def _team(session: Session, viewer: Viewer, name: str) -> Team:
+    team = visible_team(session, viewer, name)
+    if team is None:
+        raise NO_TEAM
+    return team
+
+
+@router.get("/teams/{name}/tokens", summary="A team's tokens", responses=TEAM_NOT_FOUND)
+def team_tokens(name: str, viewer: ViewerDep, session: SessionDep) -> TokenList:
+    """Admins, auditors and the team's leads."""
+    team = _team(session, viewer, name)
+    if not may_read_tokens(viewer, team.name):
+        raise FORBIDDEN
+    return TokenList(tokens=[TokenOut.of(t) for t in list_tokens(session, team.id)])
+
+
+@router.post(
+    "/teams/{name}/tokens",
+    status_code=201,
+    summary="Create a team or host token (admins, the team's leads)",
+    responses=TEAM_NOT_FOUND,
+)
+def new_team_token(
+    name: str, request: TeamTokenRequest, viewer: ViewerDep, session: SessionDep
+) -> NewToken:
+    team = _team(session, viewer, name)
+    if not may_manage_tokens(viewer, request.kind, team.name):
+        raise FORBIDDEN
+    return _new_token(session, viewer, request, request.kind, team.id, request.host_name)
+
+
+@router.delete(
+    "/teams/{name}/tokens/{token_id}",
+    status_code=204,
+    summary="Revoke a team's token (admins, the team's leads)",
+    responses=TEAM_NOT_FOUND,
+)
+def delete_team_token(name: str, token_id: int, viewer: ViewerDep, session: SessionDep) -> Response:
+    team = _team(session, viewer, name)
+    if not may_manage_tokens(viewer, "team", team.name):
+        raise FORBIDDEN
+    if not revoke_token(session, token_id, datetime.now(UTC), actor_of(viewer), team.id):
+        raise HTTPException(404, "no such token in this team")
+    return Response(status_code=204)
+
+
+class QueuedHostOut(BaseModel):
+    name: str
+    os: str
+    first_seen: datetime
+    last_seen: datetime
+    reports: int | None = Field(description="None for leads, who see no report content")
+    worst: str | None
+
+
+class QueueOut(BaseModel):
+    hosts: list[QueuedHostOut]
+
+
+class MapRequest(BaseModel):
+    team: str
+
+
+class Mapped(BaseModel):
+    host: str
+    team: str | None
+    reports_moved: int
+
+
+def _mapping_error(exc: MappingError) -> HTTPException:
+    return HTTPException(exc.status, exc.detail)
+
+
+@router.get("/queue", summary="Unmapped hosts (admins, auditors, leads)")
+def unassigned_queue(viewer: ViewerDep, session: SessionDep) -> QueueOut:
+    """Leads see the host names, to map them; reading the queued reports needs an admin
+    or auditor."""
+    if not queue_visible(session, viewer):
+        raise FORBIDDEN
+    return QueueOut(hosts=[QueuedHostOut(**h.__dict__) for h in queue(session, viewer)])
+
+
+@router.put("/hosts/{name}/team", summary="Map a host to a team, moving its reports")
+def put_host_team(name: str, request: MapRequest, viewer: ViewerDep, session: SessionDep) -> Mapped:
+    try:
+        moved = map_host(session, viewer, name, request.team)
+    except MappingError as exc:
+        raise _mapping_error(exc) from None
+    return Mapped(host=name.lower(), team=request.team, reports_moved=moved)
+
+
+@router.delete(
+    "/hosts/{name}/team", status_code=204, summary="Send a host back to the queue (admins)"
+)
+def delete_host_team(name: str, viewer: ViewerDep, session: SessionDep) -> Response:
+    try:
+        unmap_host(session, viewer, name)
+    except MappingError as exc:
+        raise _mapping_error(exc) from None
+    return Response(status_code=204)
+
+
+class TeamOut(BaseModel):
+    name: str
+    public: bool
+    hosts: int
+    reports: int
+    retention: str
+
+
+class TeamList(BaseModel):
+    teams: list[TeamOut]
+
+
+class NewTeam(BaseModel):
+    name: str
+
+
+class TeamChange(BaseModel):
+    public: bool
+
+
+def _team_out(session: Session, viewer: Viewer, name: str) -> TeamOut:
+    row = next(r for r in list_teams(session, viewer) if r.name == name)
+    return TeamOut(**row.__dict__)
+
+
+@router.get("/teams", summary="Teams you can see")
+def teams(viewer: ViewerDep, session: SessionDep) -> TeamList:
+    """All teams for admins and auditors; your own and the public ones for others."""
+    return TeamList(teams=[TeamOut(**r.__dict__) for r in list_teams(session, viewer)])
+
+
+@router.post("/teams", status_code=201, summary="Create a team ahead of sign-in (admins)")
+def new_team(request: NewTeam, viewer: ViewerDep, session: SessionDep) -> TeamOut:
+    if not viewer.is_admin:
+        raise FORBIDDEN
+    try:
+        team = create_team(session, actor_of(viewer), request.name)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return _team_out(session, viewer, team.name)
+
+
+@router.patch(
+    "/teams/{name}", summary="Make a team public or private (admins, the team's leads)",
+    responses=TEAM_NOT_FOUND,
+)  # fmt: skip
+def change_team(name: str, request: TeamChange, viewer: ViewerDep, session: SessionDep) -> TeamOut:
+    team = _team(session, viewer, name)
+    if not may_set_visibility(viewer, team.name):
+        raise FORBIDDEN
+    set_visibility(session, actor_of(viewer), team, request.public)
+    return _team_out(session, viewer, team.name)
+
+
+@router.delete(
+    "/reports/{report_id}",
+    status_code=204,
+    summary="Delete a report (admins; leads, their team's)",
+    responses=NOT_FOUND,
+)
+def remove_report(report_id: int, viewer: ViewerDep, session: SessionDep) -> Response:
+    try:
+        deleted = delete_report(session, viewer, report_id, actor_of(viewer))
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from None
+    if not deleted:
+        raise HTTPException(404, "no such report")
+    return Response(status_code=204)
+
+
+class SettingsBody(BaseModel):
+    retention_days: int | None = Field(description="None: keep reports forever")
+    only_admins_map: bool
+    max_upload_bytes: int
+
+
+class RetentionBody(BaseModel):
+    days: int | None = Field(description="With forever false: None inherits")
+    forever: bool = False
+
+
+@router.get("/settings", summary="Global settings (admins and auditors)")
+def global_settings(viewer: ViewerDep, session: SessionDep) -> SettingsBody:
+    if not viewer.reads_all:
+        raise FORBIDDEN
+    return SettingsBody(**get_settings(session).__dict__)
+
+
+@router.put("/settings", summary="Change the global settings (admins)")
+def put_settings(request: SettingsBody, viewer: ViewerDep, session: SessionDep) -> SettingsBody:
+    if not may_change_settings(viewer):
+        raise FORBIDDEN
+    try:
+        new = update_settings(session, actor_of(viewer), **request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return SettingsBody(**new.__dict__)
+
+
+def _set_retention(session: Session, viewer: Viewer, request: RetentionBody, **target: Any) -> None:
+    if not may_set_retention(viewer):
+        raise FORBIDDEN
+    try:
+        set_retention(session, actor_of(viewer), days=request.days, forever=request.forever,
+                      **target)  # fmt: skip
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+
+@router.put("/teams/{name}/retention", summary="A team's retention (admins)",
+            responses=TEAM_NOT_FOUND)  # fmt: skip
+def put_team_retention(
+    name: str, request: RetentionBody, viewer: ViewerDep, session: SessionDep
+) -> RetentionBody:
+    _set_retention(session, viewer, request, team=_team(session, viewer, name))
+    return request
+
+
+@router.put("/hosts/{name}/retention", summary="A host's retention (admins)",
+            responses={404: {"description": "No such host"}})  # fmt: skip
+def put_host_retention(
+    name: str, request: RetentionBody, viewer: ViewerDep, session: SessionDep
+) -> RetentionBody:
+    host = session.scalar(select(Host).where(Host.name == name.lower()))
+    if host is None:
+        raise HTTPException(404, "no such host")
+    _set_retention(session, viewer, request, host=host)
+    return request
+
+
+class AuditOut(BaseModel):
+    id: int
+    at: datetime
+    actor: str
+    action: str
+    target: str
+    details: dict[str, Any]
+
+
+class AuditList(BaseModel):
+    entries: list[AuditOut]
+    next_before: int | None
+
+
+@router.get("/audit", summary="The audit log, newest first (admins and auditors)")
+def audit_log(
+    viewer: ViewerDep, session: SessionDep, action: str | None = None, before: int | None = None
+) -> AuditList:
+    """`action` keeps the actions starting with it, e.g. `token.` or `host.map`."""
+    if not may_read_audit(viewer):
+        raise FORBIDDEN
+    entries, next_before = page_of(
+        list_audit(session, action=action, before=before, limit=PAGE_SIZE + 1), PAGE_SIZE
+    )
+    return AuditList(
+        entries=[AuditOut.model_validate(e, from_attributes=True) for e in entries],
+        next_before=next_before,
+    )

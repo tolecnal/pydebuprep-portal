@@ -9,8 +9,10 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
+from pydebuprep_portal.audit import record
+from pydebuprep_portal.ingest import valid_host_name
 from pydebuprep_portal.models import TOKEN_KINDS, Token
 
 # A prefix, not a secret.
@@ -49,11 +51,28 @@ def _hash(secret: str) -> str:
 
 
 def create_token(
-    session: Session, *, kind: str, name: str, created_by: str, expires_at: datetime | None
+    session: Session,
+    *,
+    kind: str,
+    name: str,
+    actor: str,
+    expires_at: datetime | None,
+    team_id: int | None = None,
+    host_name: str | None = None,
 ) -> tuple[Token, str]:
-    """Store a new token and return it with its plaintext, which is never stored."""
+    """Store a new token and return it with its plaintext, which is never stored.
+    A global token has no team; a team token has a team; a host token has a team and
+    the one host name it may upload for. ValueError says what is wrong."""
     if kind not in TOKEN_KINDS:
         raise ValueError(f"unknown token kind {kind!r}")
+    if (kind == "global") != (team_id is None):
+        raise ValueError("a global token has no team; team and host tokens need one")
+    if kind == "host":
+        if host_name is None or not valid_host_name(host_name.strip()):
+            raise ValueError("a host token needs the host name it is for")
+        host_name = host_name.strip().lower()
+    elif host_name is not None:
+        raise ValueError("only a host token is for one host")
     public_id = secrets.token_hex(4)
     while session.scalar(select(Token.id).where(Token.public_id == public_id)) is not None:
         public_id = secrets.token_hex(4)  # pragma: no cover - a 1 in 4 billion clash
@@ -64,10 +83,15 @@ def create_token(
         public_id=public_id,
         secret_hash=_hash(secret),
         created_at=datetime.now(UTC),
-        created_by=created_by,
+        created_by=actor,
         expires_at=expires_at,
+        team_id=team_id,
+        host_name=host_name,
     )
     session.add(token)
+    session.flush()
+    record(session, actor, "token.create", name, kind=kind, team_id=team_id,
+           host_name=host_name, public_id=public_id)  # fmt: skip
     session.commit()
     return token, f"{TOKEN_PREFIX}{public_id}_{secret}"
 
@@ -90,16 +114,33 @@ def authenticate(session: Session, authorization: str | None, now: datetime) -> 
     return token
 
 
-def revoke_token(session: Session, token_id: int, now: datetime) -> bool:
-    """Revoke a token (once; revoking again keeps the first time). False if unknown."""
+def find_token(session: Session, token_id: int, team_id: int | None = None) -> Token | None:
+    """The token; with TEAM_ID, only if it is that team's."""
     token = session.get(Token, token_id)
+    if token is None or (team_id is not None and token.team_id != team_id):
+        return None
+    return token
+
+
+def revoke_token(
+    session: Session, token_id: int, now: datetime, actor: str, team_id: int | None = None
+) -> bool:
+    """Revoke a token (once; revoking again keeps the first time). False if unknown, or
+    with TEAM_ID, not that team's."""
+    token = find_token(session, token_id, team_id)
     if token is None:
         return False
     if token.revoked_at is None:
         token.revoked_at = now
+        record(session, actor, "token.revoke", token.name, kind=token.kind,
+               team_id=token.team_id, public_id=token.public_id)  # fmt: skip
         session.commit()
     return True
 
 
-def list_tokens(session: Session) -> list[Token]:
-    return list(session.scalars(select(Token).order_by(Token.id.desc())))
+def list_tokens(session: Session, team_id: int | None = None) -> list[Token]:
+    """Every token, newest first; with TEAM_ID, that team's."""
+    query = select(Token).options(joinedload(Token.team)).order_by(Token.id.desc())
+    if team_id is not None:
+        query = query.where(Token.team_id == team_id)
+    return list(session.scalars(query))

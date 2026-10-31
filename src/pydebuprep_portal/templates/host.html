@@ -2,6 +2,36 @@
 {% block title %}{{ host }} — pydebuprep portal{% endblock %}
 {% block main %}
 <h1>{{ host }}</h1>
+<p>Team: {% if team %}<a href="/teams/{{ team }}">{{ team }}</a>{% else %}unassigned{% endif %}. Reports are kept {{ retention }}.</p>
+{% if viewer.is_admin %}
+<form class="filters" method="post" action="/hosts/{{ host }}/retention">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <label>Retention
+    <select name="mode">
+      <option value="inherit"{% if not host_row.keep_forever and host_row.retention_days is none %} selected{% endif %}>inherit</option>
+      <option value="days"{% if host_row.retention_days %} selected{% endif %}>days</option>
+      <option value="forever"{% if host_row.keep_forever %} selected{% endif %}>keep forever</option>
+    </select>
+  </label>
+  <label>Days <input name="days" inputmode="numeric" size="6" value="{{ host_row.retention_days or '' }}"></label>
+  <button type="submit">Set retention</button>
+</form>
+{% endif %}
+{% if team_choices %}
+<form class="filters" method="post" action="/hosts/{{ host }}/map">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <label>{% if team %}Move to{% else %}Map to{% endif %}
+    <select name="team">{% for name in team_choices %}<option value="{{ name }}"{% if name == team %} selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+  </label>
+  <button type="submit">{% if team %}Move the host and all its reports{% else %}Map{% endif %}</button>
+</form>
+{% if team %}
+<form method="post" action="/hosts/{{ host }}/unmap" class="inline">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+  <button type="submit">Back to the unassigned queue</button>
+</form>
+{% endif %}
+{% endif %}
 <p class="empty">Reports oldest first. A change of OS or kernel between reports that shouldn't be there may mean two machines report the same host name.</p>
 <table>
   <thead><tr><th>Report</th><th>Generated</th><th>Worst</th><th>Critical</th><th>Warning</th>

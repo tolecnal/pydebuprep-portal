@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -13,6 +15,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from pydebuprep_portal import __version__, api, auth, pages
 from pydebuprep_portal.db import make_engine, make_sessionmaker
+from pydebuprep_portal.retention import run_expiry_forever
 from pydebuprep_portal.security import SecurityHeaders
 from pydebuprep_portal.settings import Settings, load_settings
 
@@ -23,9 +26,15 @@ SESSION_SECONDS = 8 * 3600
 def create_app(settings: Settings) -> FastAPI:
     engine = make_engine(settings.database_url)
 
+    maker = make_sessionmaker(engine)
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        expiry = asyncio.create_task(run_expiry_forever(maker))
         yield
+        expiry.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await expiry
         engine.dispose()
 
     app = FastAPI(
@@ -36,7 +45,7 @@ def create_app(settings: Settings) -> FastAPI:
         redoc_url=None,
     )
     app.state.settings = settings
-    app.state.sessionmaker = make_sessionmaker(engine)
+    app.state.sessionmaker = maker
     app.state.oauth = auth.make_oauth(settings)
     app.add_middleware(
         SessionMiddleware,

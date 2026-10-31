@@ -15,10 +15,12 @@ from fastapi.responses import RedirectResponse, Response
 from joserfc import jwt
 from joserfc.errors import JoseError
 from joserfc.jwk import KeySet
+from starlette.concurrency import run_in_threadpool
 
-from pydebuprep_portal.access import Viewer, roles_from_groups
+from pydebuprep_portal.access import Viewer, roles_from_groups, teams_from_groups
 from pydebuprep_portal.security import require_csrf
 from pydebuprep_portal.settings import Settings
+from pydebuprep_portal.teams import ensure_teams
 from pydebuprep_portal.templating import error_page
 
 SESSION_USER = "user"
@@ -75,10 +77,14 @@ def display_name(claims: dict[str, Any]) -> str:
 
 
 def _viewer(claims: dict[str, Any], settings: Settings) -> Viewer:
+    groups = claims.get(settings.oidc_groups_claim)
+    teams, leads = teams_from_groups(groups, settings.group_prefix)
     return Viewer(
         subject=str(claims["sub"]),
         name=display_name(claims),
-        roles=roles_from_groups(claims.get(settings.oidc_groups_claim), settings.group_prefix),
+        roles=roles_from_groups(groups, settings.group_prefix),
+        teams=teams,
+        leads=leads,
     )
 
 
@@ -107,13 +113,22 @@ async def callback(request: Request) -> Response:
         )
     next_path = safe_next(request.session.get("next"))
     viewer = _viewer(claims, _settings(request))
+    await run_in_threadpool(_ensure_teams, request, viewer.teams)
     request.session.clear()  # a new session for the signed-in user
     request.session[SESSION_USER] = {
         "sub": viewer.subject,
         "name": viewer.name,
         "roles": sorted(viewer.roles),
+        "teams": sorted(viewer.teams),
+        "leads": sorted(viewer.leads),
     }
     return RedirectResponse(next_path, status_code=303)
+
+
+def _ensure_teams(request: Request, names: frozenset[str]) -> None:
+    """A team appears the first time someone signs in with its group."""
+    with request.app.state.sessionmaker() as session:
+        ensure_teams(session, names)
 
 
 @router.post("/logout", dependencies=[Depends(require_csrf)])
@@ -139,7 +154,13 @@ def page_viewer(request: Request) -> Viewer:
     if not isinstance(user, dict):
         path = request.url.path + (f"?{request.url.query}" if request.url.query else "")
         raise SignInRequired(path)
-    return Viewer(str(user["sub"]), str(user["name"]), frozenset(user["roles"]))
+    return Viewer(
+        str(user["sub"]),
+        str(user["name"]),
+        frozenset(user["roles"]),
+        teams=frozenset(user.get("teams", [])),
+        leads=frozenset(user.get("leads", [])),
+    )
 
 
 def sign_in_redirect(_: Request, exc: Exception) -> Response:
