@@ -1,0 +1,83 @@
+name: Release
+
+# On a v* tag: build the image, run the end-to-end smoke test against it, publish it to
+# ghcr.io/tolecnal/pydebuprep-portal with a signed build-provenance attestation, and
+# make a GitHub Release. Run by hand (workflow_dispatch) it builds and tests only.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build, test and publish the image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+      packages: write # push the image
+      id-token: write # sign the provenance attestation
+      attestations: write # store the attestation
+    env:
+      IMAGE: ghcr.io/tolecnal/pydebuprep-portal
+      TAG: ${{ github.ref_name }}
+      PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Read the package version
+        id: version
+        run: |
+          version=$(python -c 'import re; print(re.search(r"__version__ = \"(.+)\"", open("src/pydebuprep_portal/__init__.py").read())[1])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$PUBLISH" = true ] && [ "$TAG" != "v$version" ]; then
+            echo "tag $TAG doesn't match the package version $version" >&2
+            exit 1
+          fi
+      - name: Install the pinned pydebuprep CLI for the smoke test
+        run: python -m pip install --require-hashes -r requirements.txt
+      - name: Build the image and run the end-to-end smoke test
+        env:
+          PORTAL_VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/smoke.sh
+      - name: Publish the image
+        id: publish
+        if: env.PUBLISH == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker tag "$IMAGE:$VERSION" "$IMAGE:latest"
+          docker push "$IMAGE:$VERSION"
+          docker push "$IMAGE:latest"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$VERSION")
+          echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: env.PUBLISH == 'true'
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
+      - name: Create the GitHub Release
+        if: env.PUBLISH == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          awk -v v="## $VERSION " 'index($0, v) == 1 {on = 1; next} /^## / {on = 0} on' CHANGELOG.md > notes.md
+          printf '\nImage: `%s:%s` (`%s`)\n\nVerify it: `gh attestation verify oci://%s:%s -R tolecnal/pydebuprep-portal`\n' \
+            "$IMAGE" "$VERSION" "$DIGEST" "$IMAGE" "$VERSION" >> notes.md
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "pydebuprep-portal $VERSION" --notes-file notes.md
