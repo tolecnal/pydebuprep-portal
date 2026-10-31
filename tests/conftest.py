@@ -25,7 +25,7 @@ from oidc_stub import OIDCStub
 from pydebuprep_portal.app import create_app
 from pydebuprep_portal.db import make_engine, make_sessionmaker, migrations_config
 from pydebuprep_portal.ingest import store_report
-from pydebuprep_portal.models import Report
+from pydebuprep_portal.models import Report, Team
 from pydebuprep_portal.settings import Settings, load_settings
 from pydebuprep_portal.tokens import create_token
 from sample import sample_json
@@ -240,3 +240,24 @@ def set_upload_limit(db: Session, limit: int) -> None:
     current = get_settings(db)
     update_settings(db, "test", retention_days=current.retention_days,
                     only_admins_map=current.only_admins_map, max_upload_bytes=limit)  # fmt: skip
+
+
+# --- teams --------------------------------------------------------------------------
+
+
+def make_team(db: Session, name: str, public: bool = False) -> Team:
+    team = db.query(Team).filter_by(name=name).one_or_none()
+    if team is None:
+        team = Team(name=name, public=public, keep_forever=False,
+                    created_at=datetime.now(UTC), created_by="test")  # fmt: skip
+        db.add(team)
+    team.public = public
+    db.commit()
+    return team
+
+
+def assign(db: Session, report: Report, team: Team | None) -> Report:
+    """Put a report and its host in TEAM (None: the queue), as mapping would."""
+    report.team_id = report.host.team_id = None if team is None else team.id
+    db.commit()
+    return report

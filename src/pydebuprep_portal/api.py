@@ -128,6 +128,8 @@ class ReportSummary(BaseModel):
     os: str
     kernel: str
     config_stale: bool
+    team: str | None = Field(description="None: the unassigned queue")
+    flagged_team: str | None = Field(description="Sent with this other team's token")
 
     @classmethod
     def of(cls, row: ReportRow) -> ReportSummary:
@@ -154,10 +156,16 @@ def reports(
     session: SessionDep,
     worst: Worst | None = None,
     host: str | None = None,
+    team: str | None = None,
+    flagged: bool = False,
     before: int | None = None,
 ) -> ReportList:
-    """Fifty at a time; pass `next_before` as `before` for the next page."""
-    rows = list_reports(session, viewer, worst=worst, host=host, before=before, limit=PAGE_SIZE + 1)
+    """Fifty at a time; pass `next_before` as `before` for the next page. `team` is a team's
+    name or `unassigned`; `flagged` keeps reports sent with another team's token."""
+    rows = list_reports(
+        session, viewer, worst=worst, host=host, team=team, flagged=flagged, before=before,
+        limit=PAGE_SIZE + 1,
+    )  # fmt: skip
     rows, next_before = page_of(rows, PAGE_SIZE)
     return ReportList(reports=[ReportSummary.of(r) for r in rows], next_before=next_before)
 

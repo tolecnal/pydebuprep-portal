@@ -21,6 +21,7 @@ from pydebuprep_portal.queries import (
     list_reports,
     page_of,
     search_findings,
+    visible_team_names,
 )
 from pydebuprep_portal.rendering import (
     MEDIA_TYPES,
@@ -50,16 +51,25 @@ def home(
     viewer: ViewerDep,
     session: SessionDep,
     worst: Worst | None = None,
+    team: str | None = None,
+    flagged: str | None = None,
     before: int | None = None,
 ) -> HTMLResponse:
-    rows = list_reports(session, viewer, worst=worst, before=before, limit=PAGE_SIZE + 1)
+    team = team or None
+    rows = list_reports(
+        session, viewer, worst=worst, team=team, flagged=bool(flagged), before=before,
+        limit=PAGE_SIZE + 1,
+    )  # fmt: skip
     rows, next_before = page_of(rows, PAGE_SIZE)
     # Only the rows for htmx's filter requests; the whole page when htmx restores history.
     partial = request.headers.get("HX-Request") and not request.headers.get(
         "HX-History-Restore-Request"
     )
     template = "_report_rows.html" if partial else "reports.html"
-    response = page(request, template, viewer, rows=rows, next_before=next_before, worst=worst)
+    response = page(
+        request, template, viewer, rows=rows, next_before=next_before, worst=worst, team=team,
+        flagged=bool(flagged), teams=visible_team_names(session, viewer),
+    )  # fmt: skip
     response.headers["Vary"] = "HX-Request, HX-History-Restore-Request"
     return response
 
