@@ -109,3 +109,13 @@ def test_manage_create_config_for_an_existing_team(
     assert main(["create-config", "web", "default"]) == 0
     capsys.readouterr()
     assert [e.action for e in db.query(AuditEntry)] == ["config.create"]
+
+
+def test_manage_create_config_that_exists(
+    db: Session, db_env: dict[str, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["create-config", "web", "default"]) == 0
+    capsys.readouterr()
+    assert main(["create-config", "web", "default"]) == 1
+    captured = capsys.readouterr()
+    assert "already has a config default" in captured.err and "Traceback" not in captured.err

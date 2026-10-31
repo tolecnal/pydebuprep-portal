@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from alembic import command
 
 from pydebuprep_portal.access import TEAM_NAME, Viewer, valid_team_name
-from pydebuprep_portal.configs import create_config, served_url
+from pydebuprep_portal.configs import ConfigError, create_config, served_url
 from pydebuprep_portal.db import make_engine, make_sessionmaker, migrations_config
 from pydebuprep_portal.retention import expire_reports
 from pydebuprep_portal.settings import SettingsError, load_settings
@@ -71,7 +71,11 @@ def main(argv: list[str] | None = None) -> int:
         with make_sessionmaker(engine)() as session:
             if get_team(session, args.team) is None:
                 create_team(session, "manage", args.team)
-            create_config(session, MANAGE, settings, args.team, args.config, actor="manage")
+            try:
+                create_config(session, MANAGE, settings, args.team, args.config, actor="manage")
+            except ConfigError as exc:
+                print(f"error: {exc.detail}", file=sys.stderr)
+                return 1
         engine.dispose()
         print(served_url(settings, args.team, args.config))
         return 0

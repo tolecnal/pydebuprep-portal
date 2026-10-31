@@ -160,8 +160,8 @@ def _from_form(f: Field, raw: str | None) -> Any:
         if text not in f.choices:
             raise ValueError(f"expected one of {', '.join(f.choices)}")
         return text
-    if f.kind == "list":
-        return [line.strip() for line in text.splitlines() if line.strip()]
+    if f.kind == "list":  # one item per line, as typed; blank lines are dropped
+        return [line for line in text.splitlines() if line.strip()]
     if f.option is None:  # pragma: no cover - only report and logs fields have none
         return text
     return f.option.coerce(text)

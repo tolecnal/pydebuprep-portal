@@ -166,3 +166,38 @@ def test_render_served_has_the_portal_upload_url(db: Session) -> None:
     first = get_version(config, 1)
     assert first is not None and etag(render_served(SETTINGS, config, first)) != tag
     assert get_version(config, 9) is None
+
+
+def test_two_creates_of_the_same_name_at_once(
+    engine: Engine, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pydebuprep_portal import configs
+
+    # Both pass the "already exists" check before either has committed.
+    real_scalar = Session.scalar
+    seen = threading.Barrier(2)
+
+    def scalar(self, statement, *args, **kw):  # type: ignore[no-untyped-def]
+        result = real_scalar(self, statement, *args, **kw)
+        if "configs.id" in str(statement) and "configs.name" in str(statement):
+            seen.wait(5)
+        return result
+
+    monkeypatch.setattr(Session, "scalar", scalar)
+    outcomes: list[object] = []
+
+    def create() -> None:
+        with make_sessionmaker(engine)() as session:
+            try:
+                outcomes.append(
+                    configs.create_config(session, MEMBER, SETTINGS, "web", "twin").name
+                )
+            except ConfigError as exc:
+                outcomes.append(exc.status)
+
+    threads = [threading.Thread(target=create) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(10)
+    assert sorted(outcomes, key=str) == sorted(["twin", 422], key=str)
