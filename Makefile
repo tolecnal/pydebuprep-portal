@@ -46,7 +46,7 @@ db-down:
 	docker stop $(DB_CONTAINER)
 
 image:
-	docker build -t pydebuprep-portal .
+	docker build -t ghcr.io/tolecnal/pydebuprep-portal:$$(.venv/bin/python -c 'from pydebuprep_portal import __version__ as v; print(v)') .
 
 # A local preview: the portal with a ready-made Keycloak and demo data.
 # PREVIEW_HOST: the name or address browsers use; anything but localhost publishes the

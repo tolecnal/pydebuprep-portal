@@ -1,6 +1,6 @@
 # What the portal runs with. Pinned versions with hashes live in requirements.txt:
 #   make lock
-pydebuprep @ https://github.com/tolecnal/pydebuprep/archive/refs/tags/v0.6.0.tar.gz
+pydebuprep @ https://github.com/tolecnal/pydebuprep/archive/refs/tags/v0.7.0.tar.gz
 fastapi
 uvicorn[standard]
 sqlalchemy>=2

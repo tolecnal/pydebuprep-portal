@@ -263,8 +263,7 @@ def validate_values(values: object, served_url: str, upload_url: str) -> dict[st
     except ConfigError as exc:
         prefix = f"{served_url}: "
         raise ConfigValuesError([e.removeprefix(prefix) for e in exc.errors]) from None
-    except RecursionError:  # re.compile on a pattern nested thousands deep
-        raise ConfigValuesError(["a pattern is nested too deeply"]) from None
+    # (Deeply nested patterns can't reach re.compile: pydebuprep caps their length.)
     return _normalised(config)
 
 

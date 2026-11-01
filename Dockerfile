@@ -1,5 +1,9 @@
 FROM debian:trixie-slim
 
+LABEL org.opencontainers.image.source="https://github.com/tolecnal/pydebuprep-portal" \
+      org.opencontainers.image.description="A portal that keeps pydebuprep reports in one place" \
+      org.opencontainers.image.licenses="MIT"
+
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 python3-venv ca-certificates \
  && rm -rf /var/lib/apt/lists/*

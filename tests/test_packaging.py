@@ -49,10 +49,10 @@ def test_env_example_lists_every_setting() -> None:
     assert "PORTAL_FORWARDED_ALLOW_IPS" in example and "POSTGRES_PASSWORD" in example
 
 
-def test_requirements_pin_pydebuprep_0_6_0() -> None:
+def test_requirements_pin_pydebuprep_0_7_0() -> None:
     text = (ROOT / "requirements.txt").read_text()
     assert re.search(
-        r"^pydebuprep @ https://github\.com/tolecnal/pydebuprep/archive/refs/tags/v0\.6\.0\.tar\.gz \\\n"
+        r"^pydebuprep @ https://github\.com/tolecnal/pydebuprep/archive/refs/tags/v0\.7\.0\.tar\.gz \\\n"
         r"\s+--hash=sha256:[0-9a-f]{64}$",
         text,
         re.MULTILINE,
@@ -148,3 +148,39 @@ def test_preview_compose_and_realm() -> None:
     assert {"oidc-group-membership-mapper", "oidc-audience-mapper"} <= mappers
     assert "preview:" in (ROOT / "Makefile").read_text()
     assert "make preview" in (ROOT / "README.md").read_text()
+
+
+def _version() -> str:
+    from pydebuprep_portal import __version__
+
+    return __version__
+
+
+def test_release_workflow_publishes_to_ghcr() -> None:
+    text = (ROOT / ".github/workflows/release.yml").read_text()
+    workflow = yaml.safe_load(text)
+    assert workflow[True]["push"]["tags"] == ["v*"]  # yaml reads "on" as True
+    job = workflow["jobs"]["image"]
+    assert job["permissions"] == {"contents": "write", "packages": "write", "id-token": "write",
+                                  "attestations": "write"}  # fmt: skip
+    assert "scripts/smoke.sh" in text  # the image is tested before it is published
+    assert job["env"]["IMAGE"] == "ghcr.io/tolecnal/pydebuprep-portal"
+    assert "push-to-registry: true" in text
+    assert "doesn't match the package version" in text
+    assert "${{" not in "".join(s.get("run", "") for s in job["steps"])  # no template injection
+
+
+def test_compose_pulls_the_released_image() -> None:
+    compose = yaml.safe_load((ROOT / "compose.yaml").read_text())
+    image = compose["services"]["portal"]["image"]
+    assert image == f"ghcr.io/tolecnal/pydebuprep-portal:${{PORTAL_VERSION:-{_version()}}}"
+    assert compose["services"]["portal"]["build"] == "."
+    assert (
+        'org.opencontainers.image.source="https://github.com/tolecnal/pydebuprep-portal"'
+        in (ROOT / "Dockerfile").read_text()
+    )
+
+
+def test_changelog_has_this_version() -> None:
+    assert f"## {_version()} " in (ROOT / "CHANGELOG.md").read_text()
+    assert "ghcr.io/tolecnal/pydebuprep-portal" in (ROOT / "README.md").read_text()
