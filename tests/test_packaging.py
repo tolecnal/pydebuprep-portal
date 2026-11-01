@@ -147,6 +147,13 @@ def test_preview_compose_and_realm() -> None:
     mappers = {m["protocolMapper"] for m in client["protocolMappers"]}
     assert {"oidc-group-membership-mapper", "oidc-audience-mapper"} <= mappers
     assert "preview:" in (ROOT / "Makefile").read_text()
+
+
+def test_preview_builds_are_not_tagged_as_a_release() -> None:
+    preview = next(
+        line for line in (ROOT / "Makefile").read_text().splitlines() if line.startswith("PREVIEW =")
+    )
+    assert "PORTAL_VERSION=preview" in preview
     assert "make preview" in (ROOT / "README.md").read_text()
 
 
