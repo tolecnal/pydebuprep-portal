@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -217,7 +218,7 @@ def map_host_page(
     request: Request, name: str, viewer: ViewerDep, session: SessionDep,
     team: Annotated[str, Form()] = "",
 ) -> Response:  # fmt: skip
-    return _map(request, session, viewer, name, team, f"/hosts/{name.lower()}")
+    return _map(request, session, viewer, name, team, None)
 
 
 @router.post("/hosts/{name}/unmap", dependencies=[Depends(require_csrf)])
@@ -228,17 +229,32 @@ def unmap_host_page(
         unmap_host(session, viewer, name)
     except MappingError as exc:
         return error_page(request, exc.status, "Not done", exc.detail)
-    return RedirectResponse(f"/hosts/{name.lower()}", status_code=303)
+    return RedirectResponse(_host_url(session, name), status_code=303)
+
+
+def _host_url(session: Session, name: str) -> str:
+    """The host's page, named as stored: a redirect never echoes what the request said."""
+    stored = session.scalar(select(Host.name).where(Host.name == name.lower())) or ""
+    return "/hosts/" + quote(stored, safe="")
+
+
+def _config_url(session: Session, config_id: int) -> str:
+    """The config's page, named as stored."""
+    team, name = session.execute(
+        select(Team.name, Config.name).join(Config.team).where(Config.id == config_id)
+    ).one()
+    return f"/configs/{quote(team, safe='')}/{quote(name, safe='')}"
 
 
 def _map(
-    request: Request, session: Session, viewer: Viewer, host: str, team: str, back: str
+    request: Request, session: Session, viewer: Viewer, host: str, team: str, back: str | None
 ) -> Response:
+    """Map HOST to TEAM, then back to BACK, or to the host's page."""
     try:
         map_host(session, viewer, host, team)
     except MappingError as exc:
         return error_page(request, exc.status, "Not done", exc.detail)
-    return RedirectResponse(back, status_code=303)
+    return RedirectResponse(back or _host_url(session, host), status_code=303)
 
 
 @router.get("/queue", response_class=HTMLResponse)
@@ -599,7 +615,7 @@ def create_config_page(
         if exc.status == 422:
             return _configs_page(request, viewer, session, 422, error=exc.detail, form_name=name)
         return error_page(request, exc.status, "Not done", exc.detail)
-    return RedirectResponse(f"/configs/{team}/{config.name}", status_code=303)
+    return RedirectResponse(_config_url(session, config.id), status_code=303)
 
 
 async def form_data(request: Request) -> dict[str, Any]:
@@ -671,7 +687,7 @@ def save_config_page(
         errors = exc.errors
     else:
         suffix = "" if saved else "?unchanged=1"
-        return RedirectResponse(f"/configs/{team}/{name}{suffix}", status_code=303)
+        return RedirectResponse(_config_url(session, config.id) + suffix, status_code=303)
     config = get_config(session, viewer, team, name) or config
     return _config_page(request, viewer, session, config, 422, shown=_typed(form), errors=errors)
 

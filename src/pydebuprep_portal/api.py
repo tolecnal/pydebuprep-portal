@@ -704,7 +704,9 @@ def host_config(
     problems = served_problems(settings, config, newest(config))
     if problems:
         # Never serve what the CLI would refuse: an error keeps hosts on their saved copy.
-        log.warning("config %s/%s no longer passes: %s", team, name, "; ".join(problems))
+        log.warning(
+            "config %s/%s no longer passes: %s", config.team.name, config.name, "; ".join(problems)
+        )
         raise HTTPException(409, "this config no longer passes pydebuprep's rules; save it again")
     text = render_served(settings, config, newest(config))
     tag = etag(text)
