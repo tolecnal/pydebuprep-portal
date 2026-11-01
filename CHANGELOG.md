@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-11-01)
 
 - **PostgreSQL 18** (was 17), in a new volume `postgres18`. Before starting this
   release, move the database over with `scripts/upgrade-postgres-18.sh` (see
