@@ -255,8 +255,14 @@ make venv        # .venv with the locked dependencies
 make db-up       # PostgreSQL 17 in Docker on 127.0.0.1:55432
 make lint test   # ruff, mypy, bandit; pytest with 100 % coverage
 make lock        # after changing requirements*.in
-scripts/smoke.sh # build the image, run it with compose, upload with the pydebuprep CLI
+PYTHON=.venv/bin/python PYDEBUPREP=.venv/bin/pydebuprep scripts/smoke.sh
 ```
+
+The smoke test builds the image, runs it with compose and uploads reports with the
+pinned pydebuprep CLI: one it makes on the spot, with the machine's ID, and two of one
+host name from different machines with nginx and Apache findings. It then checks inside
+the container that the machine IDs, the clash and the findings' evidence were stored
+and can be found, and that the portal answers. CI runs it on every pull request.
 
 ## License
 

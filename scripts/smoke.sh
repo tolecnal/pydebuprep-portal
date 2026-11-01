@@ -1,9 +1,11 @@
 #!/bin/sh
-# Build and start the portal with compose, then upload a report with the pydebuprep
-# CLI (PYDEBUPREP, default: pydebuprep) and check the portal answers. Cleans up after.
+# Build and start the portal with compose, then upload reports with the pydebuprep
+# CLI (PYDEBUPREP, default: pydebuprep) and check what the portal stored and answers.
+# PYTHON (default: python3) must have the pinned pydebuprep installed. Cleans up after.
 set -eu
 cd "$(dirname "$0")/.."
 PYDEBUPREP=${PYDEBUPREP:-pydebuprep}
+PYTHON=${PYTHON:-python3}
 work=$(mktemp -d)
 project=portal-smoke
 POSTGRES_PASSWORD="smoke-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
@@ -36,13 +38,31 @@ upload:
   url: $base
   pending_dir: null
 CONF
-for attempt in first again; do
+upload() {  # NAME FILE
   out=$(PYDEBUPREP_TOKEN=$token PYDEBUPREP_STATE_DIR="$work" \
-        "$PYDEBUPREP" upload --allow-http --config "$work/pydebuprep.conf" \
-        tests/data/sample-report.json)
-  echo "$attempt: $out"
+        "$PYDEBUPREP" upload --allow-http --config "$work/pydebuprep.conf" "$2")
+  echo "$1: $out"
   case $out in *"uploaded to $base/reports/"*) ;; *) echo "smoke: upload failed" >&2; exit 1 ;; esac
-done
+}
+upload first tests/data/sample-report.json
+upload again tests/data/sample-report.json
+
+# A report the CLI makes here and now, with this machine's ID; and two reports of one
+# host name from two machines, with nginx and Apache findings.
+"$PYDEBUPREP" report --no-baseline --checks os-release --format json -o "$work/fresh.json" || true
+upload fresh "$work/fresh.json"
+"$PYTHON" scripts/smoke_reports.py "$work"
+upload clash-1 "$work/smoke-web-1.json"
+upload clash-2 "$work/smoke-web-2.json"
+fresh_host=$("$PYTHON" -c "import json, sys; print(json.load(open(sys.argv[1]))['host']['hostname'])" "$work/fresh.json")
+# systemd's own app-specific ID where it is available, else pydebuprep's.
+if command -v systemd-id128 >/dev/null && [ -s /etc/machine-id ]; then
+  fresh_machine=$(systemd-id128 machine-id -a e44561703c184c26a2c15fb541fc276a)
+else
+  fresh_machine=$("$PYTHON" -c "from pydebuprep.identity import machine_id; from pydebuprep.system import System; print(machine_id(System()) or '')")
+fi
+docker compose -p "$project" exec -T portal python - "$fresh_host" "$fresh_machine" \
+  < scripts/smoke_check.py
 
 url=$(docker compose -p "$project" exec -T portal \
   python -m pydebuprep_portal.manage create-config smoke default)

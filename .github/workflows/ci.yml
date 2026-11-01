@@ -60,5 +60,7 @@ jobs:
           python-version: "3.13"
       - name: Install the pinned pydebuprep CLI
         run: python -m pip install --require-hashes -r requirements.txt
-      - name: Build, run with compose, upload with pydebuprep
+      - name: Build, run with compose, upload with pydebuprep, check what was stored
+        env:
+          PYTHON: python
         run: scripts/smoke.sh
