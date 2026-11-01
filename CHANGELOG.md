@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- A new look: the navigation moves to a sidebar on the left, grouped by what you do there,
+  with the current page marked; on a phone it folds into a menu button. Severities show as
+  coloured badges, a report's counts as tiles, and tables, forms and notices are cards.
+  Light and dark follow the system setting.
+
 ## 0.1.0 (2026-10-31)
 
 The first release: the whole build order of the portal's design.

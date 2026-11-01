@@ -25,8 +25,8 @@ def test_sign_in_creates_teams_and_stores_memberships(
     assert teams["web"].public is False
     assert teams["web"].created_by == "sign-in"
     page = oidc_client.get("/").text
-    assert '<span class="team">web (lead)</span>' in page
-    assert '<span class="team">db</span>' in page
+    assert '<span class="chip team">web (lead)</span>' in page
+    assert '<span class="chip team">db</span>' in page
 
 
 def test_sign_in_again_doesnt_duplicate_teams(

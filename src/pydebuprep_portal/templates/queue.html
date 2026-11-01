@@ -19,7 +19,7 @@
       <form method="post" action="/queue/{{ host.name }}/map" class="inline">
         <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
         <select name="team">{% for name in team_choices %}<option value="{{ name }}">{{ name }}</option>{% endfor %}</select>
-        <button type="submit">Map</button>
+        <button type="submit" class="primary small">Map</button>
       </form>
     </td>{% endif %}
   </tr>
