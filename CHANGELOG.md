@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-11-01)
 
 - Built on pydebuprep 0.8.0. **Upgrade the portal before its hosts:** pydebuprep 0.8.0
   sends a machine ID, which a portal built on 0.7.0 (0.2.0 and older) refuses. This
