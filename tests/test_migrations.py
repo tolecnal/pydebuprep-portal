@@ -169,3 +169,49 @@ def test_config_names_are_unique_per_team(db: Session) -> None:
     _config(db, other)  # the same name in another team is fine
     with pytest.raises(IntegrityError):
         _config(db, web)
+
+
+def test_upgrade_to_0004_fills_in_finding_text(engine: Engine, db_url: str) -> None:
+    config = migrations_config(db_url)
+    body = (
+        '{"results": [{"findings": [{"title": "a", "detail": "the detail",'
+        ' "evidence": ["line 1", "line 2"]}, {"title": "b"}],'
+        ' "baseline_diff": [{"title": "c", "evidence": ["was there"]}]}]}'
+    )
+    command.downgrade(config, "0003")
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("TRUNCATE hosts, tokens, reports, findings RESTART IDENTITY CASCADE"))
+            conn.execute(text(
+                "INSERT INTO hosts (name, first_seen, last_seen) VALUES ('web1', now(), now());"
+                "INSERT INTO tokens (kind, name, public_id, secret_hash, created_at, created_by)"
+                " VALUES ('global', 't', '0123abcd', 'x', now(), 'test')"
+            ))  # fmt: skip
+            for sha, stored, titles in (("a", body, "abc"), ("b", "not json", "d")):
+                report = conn.execute(text(
+                    "INSERT INTO reports (host_id, token_id, sha256, generated_at, received_at,"
+                    " worst, critical, warning, info, error, os_id, os_version, codename, kernel,"
+                    " tool_version, config_stale, body) VALUES (1, 1, :sha, now(), now(), 'ok',"
+                    " 0, 0, 0, 0, 'debian', '13', 'trixie', '6.12', '0.7.0', false, :body)"
+                    " RETURNING id"
+                ), {"sha": sha, "body": stored}).scalar()  # fmt: skip
+                for title in titles:
+                    conn.execute(
+                        text(
+                            "INSERT INTO findings (report_id, check_id, severity, title)"
+                            " VALUES (:r, 'x', 'info', :t)"
+                        ),
+                        {"r": report, "t": title},
+                    )
+    finally:
+        command.upgrade(config, "head")
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT title, text FROM findings ORDER BY id")).all()
+    assert rows == [
+        ("a", "the detail\nline 1\nline 2"),
+        ("b", ""),
+        ("c", "was there"),
+        ("d", ""),  # its report isn't readable: searchable by title only
+    ]
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT machine_id FROM reports")).scalars().all() == [None, None]

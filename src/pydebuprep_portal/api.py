@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from pydebuprep.render import FORMATS
 from pydebuprep.schema import report_schema
@@ -245,6 +245,10 @@ class HostSummary(BaseModel):
     worst: str
     previous_worst: str | None
     worse: bool
+    machines: int
+    release: str
+    codename: str
+    kernel: str
 
 
 class HostList(BaseModel):
@@ -258,10 +262,23 @@ class Timeline(BaseModel):
 
 @router.get("/hosts", summary="Hosts and their newest report")
 def hosts(
-    viewer: ViewerDep, session: SessionDep, name: str | None = None, worse_only: bool = False
+    viewer: ViewerDep,
+    session: SessionDep,
+    name: str | None = None,
+    worse_only: bool = False,
+    release: str | None = None,
+    kernel: str | None = None,
+    silent_days: Annotated[int | None, Query(ge=0, le=36_500)] = None,
 ) -> HostList:
-    """`worse` is true when the newest report is worse than the one before it."""
-    rows = list_hosts(session, viewer, name=name, worse_only=worse_only)
+    """`worse` is true when the newest report is worse than the one before it. `release`
+    is the newest report's codename (`bookworm`), `kernel` part of its kernel;
+    `silent_days` keeps the hosts whose newest report is older than that. `machines`
+    counts the different machine IDs among a host's reports: more than one means two
+    machines report the same host name."""
+    rows = list_hosts(
+        session, viewer, name=name, worse_only=worse_only, release=release, kernel=kernel,
+        silent_days=silent_days,
+    )  # fmt: skip
     return HostList(hosts=[HostSummary(**r.__dict__) for r in rows])
 
 
@@ -300,12 +317,16 @@ def findings(
     check: str | None = None,
     severity: Literal["critical", "warning", "info"] | None = None,
     words: str | None = None,
+    since: date | None = None,
+    until: date | None = None,
     before: Before = None,
 ) -> FindingList:
-    """`host` matches part of a name; every one of `words` must appear in the title."""
+    """`host` matches part of a name; every one of `words` must appear in the title, the
+    detail or the evidence. `since` and `until` are the first and last day (UTC) of the
+    reports."""
     hits = search_findings(
         session, viewer, host=host, check=check, severity=severity, words=words,
-        before=before, limit=PAGE_SIZE + 1,
+        since=since, until=until, before=before, limit=PAGE_SIZE + 1,
     )  # fmt: skip
     hits, next_before = page_of(hits, PAGE_SIZE)
     return FindingList(findings=[FindingOut(**h.__dict__) for h in hits], next_before=next_before)

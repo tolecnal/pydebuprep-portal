@@ -100,7 +100,9 @@ def test_hosts_api(admin: TestClient, add_report: AddReport, bearer: Bearer) -> 
         "hosts"
     ]
     assert hosts == [{"name": "a", "last_report_id": newest.id, "last_generated_at": "2026-10-02T09:00:00Z",
-                      "worst": "warning", "previous_worst": "ok", "worse": True}]  # fmt: skip
+                      "worst": "warning", "previous_worst": "ok", "worse": True, "machines": 0,
+                      "release": "debian 13 (trixie)", "codename": "trixie",
+                      "kernel": "6.12.0-1-amd64"}]  # fmt: skip
     timeline = admin.get("/api/v1/hosts/a/timeline", headers=headers).json()
     assert timeline["host"] == "a"
     assert [r["id"] for r in timeline["reports"]][-1] == newest.id

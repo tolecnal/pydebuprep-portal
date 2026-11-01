@@ -16,11 +16,14 @@
       {% for level in severities %}<option value="{{ level }}"{% if form.severity == level %} selected{% endif %}>{{ level }}</option>{% endfor %}
     </select>
   </label>
-  <label>Words in the title <input type="search" name="words" value="{{ form.words }}"></label>
+  <label>Words <input type="search" name="words" value="{{ form.words }}" placeholder="in the title, detail or evidence"></label>
+  <label>From <input type="date" name="from" value="{{ form['from'] }}"></label>
+  <label>To <input type="date" name="to" value="{{ form['to'] }}"></label>
   <button type="submit" class="primary">Search</button>
 </form>
 {% if error %}<p class="notice">{{ error }}</p>{% endif %}
 {% if hits %}
+<p class="counts"><a class="csv" href="/search?{{ form | combine({'format': 'csv'}) | urlencode_set }}">Download all matches as CSV</a></p>
 <table>
   <thead><tr><th>Host</th><th>Report</th><th>Generated</th><th>Check</th><th>Severity</th><th>Finding</th></tr></thead>
   <tbody>

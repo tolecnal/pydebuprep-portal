@@ -24,14 +24,21 @@ def sample_report(
     *,
     hostname: str = "web1",
     generated_at: str = "2026-10-31T09:00:00+00:00",
-    findings: tuple[tuple[str, str, str], ...] = DEFAULT_FINDINGS,
+    findings: tuple[tuple[str, ...], ...] = DEFAULT_FINDINGS,
     os_version: str = "13",
+    codename: str = "trixie",
     kernel: str = "6.12.0-1-amd64",
     stale: bool = False,
+    machine_id: str | None = None,
 ) -> Report:
+    """FINDINGS are (check, severity, title), optionally followed by a detail and
+    evidence lines."""
     by_check: dict[str, list[Finding]] = {}
-    for check, severity, title in findings:
-        by_check.setdefault(check, []).append(Finding(Severity(severity), title))
+    for check, severity, title, *more in findings:
+        detail = more[0] if more else ""
+        by_check.setdefault(check, []).append(
+            Finding(Severity(severity), title, detail=detail, evidence=list(more[1:]))
+        )
     results = [
         CheckResult(check, check, "system", Status.FINDINGS, findings=items)
         for check, items in by_check.items()
@@ -40,7 +47,7 @@ def sample_report(
     return Report(
         tool={"name": "pydebuprep", "version": "0.5.0"},
         generated_at=generated_at,
-        host=Host(hostname, "debian", os_version, "trixie", kernel, True),
+        host=Host(hostname, "debian", os_version, codename, kernel, True, machine_id),
         baseline=None,
         summary=compute_summary(results),
         results=results,

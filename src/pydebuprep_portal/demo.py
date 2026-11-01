@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime, timedelta
 
 from pydebuprep.model import (
@@ -26,7 +27,7 @@ from pydebuprep_portal.teams import create_team, get_team, set_visibility
 from pydebuprep_portal.tokens import create_token
 
 ADMIN = Viewer("demo", "demo", frozenset({"admin"}))
-FINDINGS = {
+FINDINGS: dict[str, list[tuple[str, ...]]] = {
     "ok": [],
     "info": [("apt-autoremove", "info", "3 packages can be autoremoved")],
     "warning": [
@@ -36,9 +37,17 @@ FINDINGS = {
     "critical": [
         ("apt-sources", "critical", "Repository still targets bookworm"),
         ("systemd-failed", "critical", "nginx.service failed"),
+        ("nginx", "warning", "nginx passes requests to sockets that don't exist",
+         "Requests sent there fail (502 Bad Gateway).",
+         "/run/php/php8.2-fpm.sock (fastcgi_pass in /etc/nginx/sites-enabled/shop); "
+         "/run/php has php8.4-fpm.sock"),
         ("disk-space", "warning", "/var is 91 % full"),
     ],
-}
+}  # fmt: skip
+# Hosts that stay on the old release, and hosts whose name a second machine took over
+# for the last reports (to show a clash).
+NOT_UPGRADED = {"docs1"}
+SECOND_MACHINE = {"web2": 2}
 # Each host's worst severity, week by week (oldest first).
 STORIES = {
     "web1": ("web", ["ok", "info", "info", "warning", "warning", "critical"]),
@@ -53,21 +62,29 @@ class DemoError(Exception):
     pass
 
 
-def _report(hostname: str, when: datetime, worst: str, week: int) -> str:
+def _machine(hostname: str, which: int) -> str:
+    return hashlib.sha256(f"{hostname}/{which}".encode()).hexdigest()[:32]
+
+
+def _report(hostname: str, when: datetime, worst: str, week: int, machine: str) -> str:
     by_check: dict[str, list[Finding]] = {}
-    for check, severity, title in FINDINGS[worst]:
-        by_check.setdefault(check, []).append(Finding(Severity(severity), title))
+    for check, severity, title, *more in FINDINGS[worst]:
+        detail, evidence = (more[0], [more[1]]) if more else ("", [])
+        by_check.setdefault(check, []).append(
+            Finding(Severity(severity), title, detail=detail, evidence=evidence)
+        )
     results = [
         CheckResult(check, check, "system", Status.FINDINGS, findings=items)
         for check, items in by_check.items()
     ]
     results.append(CheckResult("fstab", "fstab", "storage", Status.OK))
-    kernel = "6.1.0-28-amd64" if week < 3 else "6.12.12-amd64"
-    release = ("12", "bookworm") if week < 3 else ("13", "trixie")
+    old = week < 3 or hostname in NOT_UPGRADED
+    kernel = "6.1.0-28-amd64" if old else "6.12.12-amd64"
+    release = ("12", "bookworm") if old else ("13", "trixie")
     report = Report(
         tool={"name": "pydebuprep", "version": "0.6.0"},
         generated_at=when.isoformat(),
-        host=Host(hostname, "debian", release[0], release[1], kernel, True),
+        host=Host(hostname, "debian", release[0], release[1], kernel, True, machine),
         baseline=None,
         summary=compute_summary(results),
         results=results,
@@ -97,7 +114,9 @@ def load_demo_data(session: Session, settings: Settings, now: datetime | None = 
         for week, worst in enumerate(story):
             when = now - timedelta(weeks=len(story) - week, hours=len(hostname))
             token_id = tokens[team_name] if team_name else fleet.id
-            body = _report(hostname, when, worst, week + 6 - len(story)).encode()
+            second = week >= len(story) - SECOND_MACHINE.get(hostname, 0)
+            machine = _machine(hostname, 2 if second else 1)
+            body = _report(hostname, when, worst, week + 6 - len(story), machine).encode()
             store_report(session, body, token_id, when + timedelta(minutes=5))
             stored += 1
     create_config(

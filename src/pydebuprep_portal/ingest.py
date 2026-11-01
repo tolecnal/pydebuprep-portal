@@ -214,16 +214,27 @@ def _insert(
         tool_version=data.tool.get("version", ""),
         config_stale=data.config is not None and data.config.stale,
         body=text,
+        machine_id=data.host.machine_id,
     )
     for result in data.results:
         for finding in all_findings(result):
             report.findings.append(
-                Finding(check_id=result.id, severity=finding.severity.value, title=finding.title)
+                Finding(
+                    check_id=result.id,
+                    severity=finding.severity.value,
+                    title=finding.title,
+                    text=finding_text(finding.detail, finding.evidence),
+                )
             )
     session.add(report)
     _used(session, token.id, now)
     session.commit()
     return report
+
+
+def finding_text(detail: str | None, evidence: list[str]) -> str:
+    """What a finding's search looks at besides its title."""
+    return "\n".join(line for line in (detail or "", *evidence) if line)
 
 
 def _assign(
