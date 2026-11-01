@@ -53,7 +53,7 @@ image:
 # ports on every interface (for a headless machine).
 PREVIEW_HOST ?= localhost
 PREVIEW_BIND = $(if $(filter localhost,$(PREVIEW_HOST)),127.0.0.1,0.0.0.0)
-PREVIEW = POSTGRES_PASSWORD=preview PORTAL_ENV_FILE=preview/preview.env PORTAL_PORT=8400 \
+PREVIEW = PORTAL_VERSION=preview POSTGRES_PASSWORD=preview PORTAL_ENV_FILE=preview/preview.env PORTAL_PORT=8400 \
   PORTAL_BIND=$(PREVIEW_BIND) PREVIEW_HOST=$(PREVIEW_HOST) \
   docker compose -p pydebuprep-preview -f compose.yaml -f compose.preview.yaml
 

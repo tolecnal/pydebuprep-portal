@@ -8,7 +8,7 @@
 <form class="filters" method="post" action="/teams">
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
   <label>New team <input name="name" maxlength="63" required value="{{ form_name or '' }}"></label>
-  <button type="submit">Create</button>
+  <button type="submit" class="primary">Create</button>
 </form>
 {% endif %}
 {% if teams %}

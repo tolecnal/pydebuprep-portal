@@ -8,24 +8,31 @@
 {% if report.token_team %}
 <p class="notice">This report was sent with team {{ report.token_team.name }}'s token; the host belongs to {{ report.team.name if report.team else "no team" }}.</p>
 {% endif %}
+<div class="stats" aria-label="Findings">
+  <div class="stat critical"><div class="label">Critical</div><div class="value">{{ report.critical }}</div></div>
+  <div class="stat warning"><div class="label">Warning</div><div class="value">{{ report.warning }}</div></div>
+  <div class="stat info"><div class="label">Info</div><div class="value">{{ report.info }}</div></div>
+  <div class="stat error"><div class="label">Checks that failed to run</div><div class="value">{{ report.error }}</div></div>
+</div>
 <dl class="facts">
   <dt>Team</dt><dd>{{ report.team.name if report.team else "unassigned" }}</dd>
   <dt>Generated</dt><dd>{{ report.generated_at | utc }}</dd>
   <dt>Received</dt><dd>{{ report.received_at | utc }}</dd>
   <dt>OS</dt><dd>{{ report.os_id }} {{ report.os_version }} ({{ report.codename }})</dd>
   <dt>Kernel</dt><dd>{{ report.kernel }}</dd>
-  <dt>Findings</dt><dd>{{ report.critical }} critical, {{ report.warning }} warning, {{ report.info }} info; {{ report.error }} checks failed to run</dd>
   <dt>pydebuprep</dt><dd>{{ report.tool_version }}</dd>
   <dt>Sent with</dt><dd>{{ report.token.name }}</dd>
 </dl>
+<div class="actions">
 <p class="downloads">Download:
-{% for fmt in formats %}<a href="/reports/{{ report.id }}/download/{{ fmt }}">{{ fmt }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+{% for fmt in formats %}<a href="/reports/{{ report.id }}/download/{{ fmt }}">{{ fmt }}</a>{% endfor %}
 </p>
 {% if may_delete %}
 <form method="post" action="/reports/{{ report.id }}/delete" class="inline">
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-  <button type="submit">Delete this report</button>
+  <button type="submit" class="danger">Delete this report</button>
 </form>
 {% endif %}
+</div>
 <iframe sandbox="" src="/reports/{{ report.id }}/html" title="The report" class="report"></iframe>
 {% endblock %}

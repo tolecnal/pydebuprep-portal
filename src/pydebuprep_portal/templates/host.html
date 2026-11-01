@@ -3,6 +3,7 @@
 {% block main %}
 <h1>{{ host }}</h1>
 <p>Team: {% if team %}<a href="/teams/{{ team }}">{{ team }}</a>{% else %}unassigned{% endif %}. Reports are kept {{ retention }}.</p>
+<div class="panels">
 {% if viewer.is_admin %}
 <form class="filters" method="post" action="/hosts/{{ host | urlpart }}/retention">
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
@@ -23,15 +24,16 @@
   <label>{% if team %}Move to{% else %}Map to{% endif %}
     <select name="team">{% for name in team_choices %}<option value="{{ name }}"{% if name == team %} selected{% endif %}>{{ name }}</option>{% endfor %}</select>
   </label>
-  <button type="submit">{% if team %}Move the host and all its reports{% else %}Map{% endif %}</button>
+  <button type="submit" class="primary">{% if team %}Move the host and all its reports{% else %}Map{% endif %}</button>
 </form>
 {% if team %}
 <form method="post" action="/hosts/{{ host | urlpart }}/unmap" class="inline">
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-  <button type="submit">Back to the unassigned queue</button>
+  <button type="submit" class="danger">Back to the unassigned queue</button>
 </form>
 {% endif %}
 {% endif %}
+</div>
 <p class="empty">Reports oldest first. A change of OS or kernel between reports that shouldn't be there may mean two machines report the same host name.</p>
 <table>
   <thead><tr><th>Report</th><th>Generated</th><th>Worst</th><th>Critical</th><th>Warning</th>

@@ -16,7 +16,7 @@
     <td>{% if may_revoke and not token.revoked_at %}
       <form method="post" action="{{ revoke_base }}/{{ token.id }}/revoke" class="inline">
         <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-        <button type="submit">Revoke</button>
+        <button type="submit" class="danger small">Revoke</button>
       </form>{% endif %}</td>
   </tr>
   {% endfor %}

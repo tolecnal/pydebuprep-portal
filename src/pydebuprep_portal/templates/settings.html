@@ -13,7 +13,7 @@
   </fieldset>
   <label><input type="checkbox" name="only_admins_map" value="1"{% if settings.only_admins_map %} checked{% endif %}> Only admins map hosts to teams</label>
   <label>Largest upload <input name="max_upload_mib" inputmode="numeric" size="5" value="{{ settings.max_upload_bytes // 1048576 }}"> MiB</label>
-  <button type="submit">Save</button>
+  <button type="submit" class="primary">Save</button>
 </form>
 {% else %}
 <dl class="facts">

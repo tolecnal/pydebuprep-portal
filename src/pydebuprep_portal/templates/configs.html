@@ -9,7 +9,7 @@
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
   <label>Team <select name="team">{% for name in editable_teams %}<option value="{{ name }}">{{ name }}</option>{% endfor %}</select></label>
   <label>Name <input name="name" maxlength="63" required value="{{ form_name or '' }}" placeholder="default"></label>
-  <button type="submit">Create a config</button>
+  <button type="submit" class="primary">Create a config</button>
 </form>
 {% endif %}
 {% if configs %}

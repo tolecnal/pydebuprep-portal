@@ -15,7 +15,7 @@
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
   <label>Name <input name="name" maxlength="100" required value="{{ form_name or '' }}"></label>
   <label>Expires after (days, empty for never) <input name="expires_days" inputmode="numeric" size="6"></label>
-  <button type="submit">Create a global token</button>
+  <button type="submit" class="primary">Create a global token</button>
 </form>
 {% endif %}
 {% set revoke_base = "/tokens" %}{% set may_revoke = viewer.is_admin %}

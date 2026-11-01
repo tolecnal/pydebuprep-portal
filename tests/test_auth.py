@@ -29,11 +29,11 @@ def test_name_falls_back_to_username_then_subject(oidc_client: TestClient, stub:
 
 def test_roles_are_read_at_every_login(oidc_client: TestClient, stub: OIDCStub) -> None:
     login(oidc_client, stub)
-    assert '<span class="role">admin</span>' in oidc_client.get("/").text
+    assert '<span class="chip role">admin</span>' in oidc_client.get("/").text
     login(oidc_client, stub, groups=["pydebuprep-auditors"])
     page = oidc_client.get("/").text
-    assert '<span class="role">auditor</span>' in page
-    assert '<span class="role">admin</span>' not in page
+    assert '<span class="chip role">auditor</span>' in page
+    assert '<span class="chip role">admin</span>' not in page
 
 
 def test_callback_with_wrong_state_is_refused(oidc_client: TestClient, stub: OIDCStub) -> None:

@@ -17,7 +17,7 @@
     </select>
   </label>
   <label>Words in the title <input type="search" name="words" value="{{ form.words }}"></label>
-  <button type="submit">Search</button>
+  <button type="submit" class="primary">Search</button>
 </form>
 {% if error %}<p class="notice">{{ error }}</p>{% endif %}
 {% if hits %}
