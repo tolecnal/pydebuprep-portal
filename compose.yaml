@@ -18,7 +18,7 @@ services:
 
   portal:
     # The released image; `docker compose build` (or `up --build`) builds it from source.
-    image: ghcr.io/tolecnal/pydebuprep-portal:${PORTAL_VERSION:-0.1.0}
+    image: ghcr.io/tolecnal/pydebuprep-portal:${PORTAL_VERSION:-0.2.0}
     build: .
     depends_on:
       db:
