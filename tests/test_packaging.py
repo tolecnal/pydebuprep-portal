@@ -34,7 +34,11 @@ def test_compose_runs_portal_and_postgres() -> None:
     compose = yaml.safe_load((ROOT / "compose.yaml").read_text())
     services = compose["services"]
     assert set(services) == {"db", "portal"}
-    assert services["db"]["image"].startswith("postgres:17")
+    assert services["db"]["image"] == "postgres:18"
+    # PostgreSQL 18's image keeps its data under /var/lib/postgresql/18/; a new volume,
+    # so the 17 one stays untouched until scripts/upgrade-postgres-18.sh moves it over.
+    assert services["db"]["volumes"] == ["postgres18:/var/lib/postgresql"]
+    assert set(compose["volumes"]) == {"postgres18"}
     assert services["portal"]["depends_on"]["db"]["condition"] == "service_healthy"
     assert services["portal"]["ports"] == ["${PORTAL_BIND:-127.0.0.1}:${PORTAL_PORT:-8000}:8000"]
     assert "healthcheck" in services["db"]
@@ -193,3 +197,19 @@ def test_compose_pulls_the_released_image() -> None:
 def test_changelog_has_this_version() -> None:
     assert f"## {_version()} " in (ROOT / "CHANGELOG.md").read_text()
     assert "ghcr.io/tolecnal/pydebuprep-portal" in (ROOT / "README.md").read_text()
+
+
+def test_tests_and_ci_use_postgres_18() -> None:
+    assert "postgres:18\n" in (ROOT / "Makefile").read_text()
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    assert ci["jobs"]["lint-test"]["services"]["postgres"]["image"] == "postgres:18"
+    assert "postgres:17" not in (ROOT / "README.md").read_text().split("## Upgrading", 1)[0]
+
+
+def test_upgrading_from_postgres_17_is_scripted_and_documented() -> None:
+    script = ROOT / "scripts/upgrade-postgres-18.sh"
+    assert script.stat().st_mode & 0o111
+    text = script.read_text()
+    assert "pg_dump" in text and "pg_restore" in text
+    assert "scripts/upgrade-postgres-18.sh" in (ROOT / "README.md").read_text()
+    assert "scripts/upgrade-postgres-18.sh" in (ROOT / "CHANGELOG.md").read_text()
