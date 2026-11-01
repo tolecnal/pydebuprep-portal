@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- The local preview's Keycloak is 26.8.1 (was 26.0.7).
+- Dependabot keeps the GitHub Actions, the pinned Python dependencies, the image's
+  base and the compose files' images current, a week after each release.
+- The smoke test also checks what reports from pydebuprep 0.8.0 leave behind: the
+  machine ID of a report made on the spot (against `systemd-id128`), a host name two
+  machines report, and findings found by their evidence.
+- README: hosts and search, the order to upgrade in, and a code block that swallowed
+  the paragraph after it.
+
 ## 0.3.0 (2026-11-01)
 
 - Built on pydebuprep 0.8.0. **Upgrade the portal before its hosts:** pydebuprep 0.8.0
