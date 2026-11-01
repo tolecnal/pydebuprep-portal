@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Protocol
+from datetime import UTC, date, datetime, time, timedelta
+from typing import Any, Protocol
 
 from sqlalchemy import ColumnElement, Select, func, or_, select, true
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased, contains_eager, joinedload
@@ -39,6 +40,7 @@ class ReportRow:
     config_stale: bool
     team: str | None
     flagged_team: str | None  # sent with this other team's token
+    machine_id: str | None = None
 
 
 def visible(viewer: Viewer) -> ColumnElement[bool]:
@@ -73,6 +75,7 @@ def report_row(report: Report) -> ReportRow:
         config_stale=report.config_stale,
         team=report.team.name if report.team else None,
         flagged_team=report.token_team.name if report.token_team else None,
+        machine_id=report.machine_id,
     )
 
 
@@ -128,7 +131,13 @@ def page_of[R: HasId](rows: list[R], size: int) -> tuple[list[R], int | None]:
     return rows, None
 
 
-def _contains(column: InstrumentedAttribute[str], text: str) -> ColumnElement[bool]:
+def _day_start(day: date) -> datetime:
+    return datetime.combine(day, time(), tzinfo=UTC)
+
+
+def _contains(
+    column: InstrumentedAttribute[str] | ColumnElement[Any], text: str
+) -> ColumnElement[bool]:
     """Case-insensitive substring match; %, _ and \\ in TEXT match themselves."""
     escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return column.ilike(f"%{escaped}%", escape="\\")
@@ -142,19 +151,36 @@ class HostRow:
     worst: str
     previous_worst: str | None
     worse: bool
+    machines: int  # different machine IDs among its reports: more than one is a clash
+    release: str = ""  # of the newest report: "debian 13 (trixie)"
+    codename: str = ""
+    kernel: str = ""
 
 
 def list_hosts(
-    session: Session, viewer: Viewer, *, name: str | None = None, worse_only: bool = False
+    session: Session,
+    viewer: Viewer,
+    *,
+    name: str | None = None,
+    worse_only: bool = False,
+    release: str | None = None,
+    kernel: str | None = None,
+    silent_days: int | None = None,
+    now: datetime | None = None,
 ) -> list[HostRow]:
     """Every host with a visible report: its newest visible one (by generated time) and the
-    worst of the one before."""
+    worst of the one before. RELEASE is the newest report's codename, KERNEL part of its
+    kernel; SILENT_DAYS keeps the hosts whose newest report is older than that."""
     ranked = (
         select(
             Report.id,
             Report.host_id,
             Report.generated_at,
             Report.worst,
+            Report.os_id,
+            Report.os_version,
+            Report.codename,
+            Report.kernel,
             func.row_number()
             .over(
                 partition_by=Report.host_id, order_by=(Report.generated_at.desc(), Report.id.desc())
@@ -166,14 +192,32 @@ def list_hosts(
     )
     newest = aliased(ranked)
     previous = aliased(ranked)
+    machines = (
+        select(Report.host_id, func.count(Report.machine_id.distinct()).label("machines"))
+        .where(visible(viewer))
+        .group_by(Report.host_id)
+        .subquery()
+    )
     query = (
-        select(Host.name, newest.c.id, newest.c.generated_at, newest.c.worst, previous.c.worst)
+        select(
+            Host.name, newest.c.id, newest.c.generated_at, newest.c.worst, previous.c.worst,
+            machines.c.machines, newest.c.os_id, newest.c.os_version, newest.c.codename,
+            newest.c.kernel,
+        )
         .join(newest, (newest.c.host_id == Host.id) & (newest.c.rank == 1))
         .outerjoin(previous, (previous.c.host_id == Host.id) & (previous.c.rank == 2))
+        .join(machines, machines.c.host_id == Host.id)
         .order_by(Host.name)
-    )
+    )  # fmt: skip
     if name:
         query = query.where(_contains(Host.name, name))
+    if release:
+        query = query.where(newest.c.codename == release)
+    if kernel:
+        query = query.where(_contains(newest.c.kernel, kernel))
+    if silent_days is not None:
+        cutoff = (now or datetime.now().astimezone()) - timedelta(days=silent_days)
+        query = query.where(newest.c.generated_at < cutoff)
     rows = [
         HostRow(
             name=host,
@@ -182,10 +226,23 @@ def list_hosts(
             worst=worst,
             previous_worst=before,
             worse=before is not None and SEVERITY_ORDER[worst] > SEVERITY_ORDER[before],
+            machines=count,
+            release=f"{os_id} {os_version} ({codename})",
+            codename=codename,
+            kernel=kernel_name,
         )
-        for host, report_id, generated_at, worst, before in session.execute(query)
-    ]
+        for (
+            host, report_id, generated_at, worst, before, count, os_id, os_version, codename,
+            kernel_name,
+        ) in session.execute(query)
+    ]  # fmt: skip
     return [r for r in rows if r.worse] if worse_only else rows
+
+
+def release_counts(rows: list[HostRow]) -> list[tuple[str, int]]:
+    """How many of ROWS run each release, most common first."""
+    counts = Counter(r.release for r in rows)
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
 
 
 def host_timeline(session: Session, viewer: Viewer, name: str) -> list[ReportRow] | None:
@@ -216,10 +273,13 @@ def search_findings(
     check: str | None = None,
     severity: str | None = None,
     words: str | None = None,
+    since: date | None = None,
+    until: date | None = None,
     before: int | None = None,
     limit: int = 50,
 ) -> list[FindingHit]:
-    """Findings, newest first; every word must appear in the title."""
+    """Findings, newest first; every word must appear in the title, the detail or the
+    evidence. SINCE and UNTIL are the first and last day (UTC) of the reports."""
     query = (
         select(
             Finding.id,
@@ -243,7 +303,11 @@ def search_findings(
     if severity:
         query = query.where(Finding.severity == severity)
     for word in (words or "").split():
-        query = query.where(_contains(Finding.title, word))
+        query = query.where(or_(_contains(Finding.title, word), _contains(Finding.text, word)))
+    if since is not None:
+        query = query.where(Report.generated_at >= _day_start(since))
+    if until is not None:
+        query = query.where(Report.generated_at < _day_start(until + timedelta(days=1)))
     if before is not None:
         query = query.where(Finding.id < before)
     return [FindingHit(*row) for row in session.execute(query)]

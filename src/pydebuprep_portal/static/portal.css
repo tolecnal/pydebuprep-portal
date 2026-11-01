@@ -131,7 +131,7 @@ h1 .sev { font-size: .8rem; vertical-align: middle; margin-left: .4rem; }
 
 /* Forms */
 label { color: var(--fg); }
-input:not([type]), input[type="search"], input[type="text"], select, textarea {
+input:not([type]), input[type="search"], input[type="text"], input[type="date"], select, textarea {
   font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm); padding: .42rem .65rem; min-height: 2.25rem; }
 textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85rem; }
@@ -210,3 +210,9 @@ code.details { font-size: .8rem; }
   dl.facts { grid-template-columns: 1fr; gap: .1rem; } dl.facts dd { margin-bottom: .5rem; }
   table { display: block; overflow-x: auto; }
 }
+
+/* Counts above a list, and its CSV download */
+.counts { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: 0 0 1rem; }
+.counts .chip strong { color: var(--fg); margin-left: .2rem; }
+.counts .csv { margin-left: auto; font-size: .9rem; }
+code.machine { font-size: .75rem; color: var(--muted); }

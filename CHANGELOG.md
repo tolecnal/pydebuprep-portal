@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- Built on pydebuprep 0.8.0. **Upgrade the portal before its hosts:** pydebuprep 0.8.0
+  sends a machine ID, which a portal built on 0.7.0 (0.2.0 and older) refuses. This
+  portal takes reports with and without one.
+- Machine IDs: reports keep the machine ID pydebuprep 0.8.0 sends (a hash of
+  `/etc/machine-id`, never the ID itself). A host name that more than one machine
+  reports is flagged in the hosts list, and its page says so and shows each report's
+  machine.
+- Hosts by release, kernel and silence: filter the hosts list by the release or kernel
+  of each host's newest report, or by no report in a number of days; the list counts
+  hosts per release. The API's `/api/v1/hosts` takes `release`, `kernel` and
+  `silent_days`, and returns each host's release, kernel and number of machines.
+- Findings by more than their title: the search's words also match a finding's detail
+  and evidence (existing findings are filled in from their reports when the database
+  is upgraded), and `from`/`to` limit the reports by date (`since`/`until` in the API).
+- CSV: the reports, hosts and search pages download what they list as CSV (every
+  match, up to 10,000 rows). Cells that would start a spreadsheet formula are escaped.
+- The demo data has a host name two machines report, a host left on bookworm, and
+  findings with details.
+
 ## 0.2.0 (2026-11-01)
 
 - A new look: the navigation moves to a sidebar on the left, grouped by what you do there,

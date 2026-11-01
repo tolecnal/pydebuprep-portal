@@ -22,6 +22,7 @@
   {% if viewer.is_admin %}<label><input type="checkbox" name="flagged" value="1"{% if flagged %} checked{% endif %}> Sent with another team's token</label>{% endif %}
   <button type="submit">Filter</button>
 </form>
+<p class="counts"><a class="csv" href="/?{{ {'worst': worst, 'team': team, 'flagged': '1' if flagged else None, 'format': 'csv'} | urlencode_set }}">Download CSV</a></p>
 <div id="rows">
 {% include "_report_rows.html" %}
 </div>

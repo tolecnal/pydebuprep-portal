@@ -4,16 +4,31 @@
 <h1>Hosts</h1>
 <form class="filters" method="get" action="/hosts">
   <label>Name <input type="search" name="name" value="{{ name_filter }}"></label>
+  <label>Release
+    <select name="release">
+      <option value="">any</option>
+      {% for codename, label in releases %}<option value="{{ codename }}"{% if codename == release %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Kernel <input type="search" name="kernel" value="{{ kernel }}" placeholder="6.1.0"></label>
+  <label>Not reported in <input name="silent" inputmode="numeric" size="5" value="{{ silent }}" placeholder="days"></label>
   <label><input type="checkbox" name="worse" value="1"{% if worse %} checked{% endif %}> Newest report worse than the one before</label>
   <button type="submit">Filter</button>
 </form>
+{% if error %}<p class="notice">{{ error }}</p>{% endif %}
+{% if counts %}
+<p class="counts">{% for label, n in counts %}<span class="chip">{{ label }} <strong>{{ n }}</strong></span>{% endfor %}
+  <a class="csv" href="/hosts?{{ filters | combine({'format': 'csv'}) | urlencode_set }}">Download CSV</a></p>
+{% endif %}
 {% if rows %}
 <table>
-  <thead><tr><th>Host</th><th>Newest report</th><th>Generated</th><th>Worst</th><th>Before</th></tr></thead>
+  <thead><tr><th>Host</th><th>Release</th><th>Kernel</th><th>Newest report</th><th>Generated</th><th>Worst</th><th>Before</th></tr></thead>
   <tbody>
   {% for row in rows %}
   <tr>
-    <td><a href="/hosts/{{ row.name | urlpart }}">{{ row.name }}</a></td>
+    <td><a href="/hosts/{{ row.name | urlpart }}">{{ row.name }}</a>{% if row.machines > 1 %} <span class="flag" title="Reports with this host name come from different machines">{{ row.machines }} machines</span>{% endif %}</td>
+    <td>{{ row.release }}</td>
+    <td>{{ row.kernel }}</td>
     <td><a href="/reports/{{ row.last_report_id }}">#{{ row.last_report_id }}</a></td>
     <td>{{ row.last_generated_at | utc }}</td>
     <td><span class="sev sev-{{ row.worst }}">{{ row.worst }}</span>{% if row.worse %} <span class="flag">worse</span>{% endif %}</td>

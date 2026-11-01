@@ -20,6 +20,7 @@
   <dt>Received</dt><dd>{{ report.received_at | utc }}</dd>
   <dt>OS</dt><dd>{{ report.os_id }} {{ report.os_version }} ({{ report.codename }})</dd>
   <dt>Kernel</dt><dd>{{ report.kernel }}</dd>
+  {% if report.machine_id %}<dt>Machine</dt><dd><code>{{ report.machine_id }}</code></dd>{% endif %}
   <dt>pydebuprep</dt><dd>{{ report.tool_version }}</dd>
   <dt>Sent with</dt><dd>{{ report.token.name }}</dd>
 </dl>

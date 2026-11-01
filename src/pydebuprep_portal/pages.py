@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydebuprep.checks import ALL_CHECKS
 from pydebuprep.render import FORMATS
@@ -39,6 +39,7 @@ from pydebuprep_portal.configs import (
     served_url,
 )
 from pydebuprep_portal.db import Before, RowId, get_session
+from pydebuprep_portal.export import MAX_ROWS, csv_response
 from pydebuprep_portal.generator import (
     LOGS_FIELD,
     REPORT_FIELDS,
@@ -58,12 +59,14 @@ from pydebuprep_portal.mapping import (
 )
 from pydebuprep_portal.models import Config, Host, Team
 from pydebuprep_portal.queries import (
+    ReportRow,
     delete_report,
     get_report,
     host_timeline,
     list_hosts,
     list_reports,
     page_of,
+    release_counts,
     search_findings,
     visible_team_names,
 )
@@ -109,8 +112,14 @@ def home(
     team: str | None = None,
     flagged: str | None = None,
     before: Before = None,
-) -> HTMLResponse:
+    format: str = "",
+) -> Response:
     team = team or None
+    if format == "csv":
+        every = list_reports(
+            session, viewer, worst=worst, team=team, flagged=bool(flagged), limit=MAX_ROWS
+        )
+        return csv_response("reports", REPORT_CSV, (_report_cells(r) for r in every))
     rows = list_reports(
         session, viewer, worst=worst, team=team, flagged=bool(flagged), before=before,
         limit=PAGE_SIZE + 1,
@@ -184,6 +193,36 @@ def report_download(
     )
 
 
+REPORT_CSV = (
+    "report", "host", "team", "generated", "received", "worst", "critical", "warning", "info",
+    "errors", "os", "kernel", "machine",
+)  # fmt: skip
+HOST_CSV = (
+    "host", "release", "kernel", "newest report", "generated", "worst", "worst before",
+    "machines",
+)  # fmt: skip
+FINDING_CSV = ("report", "host", "generated", "check", "severity", "finding")
+MAX_SILENT_DAYS = 36_500
+
+
+def _report_cells(r: ReportRow) -> tuple[object, ...]:
+    return (
+        r.id, r.host, r.team or "unassigned", r.generated_at.isoformat(),
+        r.received_at.isoformat(), r.worst, r.critical, r.warning, r.info, r.error, r.os,
+        r.kernel, r.machine_id,
+    )  # fmt: skip
+
+
+def _days(text: str) -> int | None:
+    """A number of days typed in a form; ValueError if it isn't one."""
+    if not text.strip():
+        return None
+    days = int(text)
+    if not 0 <= days <= MAX_SILENT_DAYS:
+        raise ValueError(text)
+    return days
+
+
 @router.get("/hosts", response_class=HTMLResponse)
 def hosts_page(
     request: Request,
@@ -191,9 +230,34 @@ def hosts_page(
     session: SessionDep,
     name: str | None = None,
     worse: str | None = None,
-) -> HTMLResponse:
-    rows = list_hosts(session, viewer, name=name, worse_only=bool(worse))
-    return page(request, "hosts.html", viewer, rows=rows, name_filter=name or "", worse=bool(worse))
+    release: str = "",
+    kernel: str = "",
+    silent: str = "",
+    format: str = "",
+) -> Response:
+    error, days = None, None
+    try:
+        days = _days(silent)
+    except ValueError:
+        error = "Not reported in: a number of days, such as 30."
+    rows = list_hosts(
+        session, viewer, name=name, worse_only=bool(worse), release=release or None,
+        kernel=kernel or None, silent_days=days,
+    )  # fmt: skip
+    if format == "csv" and error is None:
+        return csv_response("hosts", HOST_CSV, (
+            (r.name, r.release, r.kernel, r.last_report_id, r.last_generated_at.isoformat(),
+             r.worst, r.previous_worst, r.machines)
+            for r in rows
+        ))  # fmt: skip
+    releases = sorted({(r.codename, r.release) for r in list_hosts(session, viewer)})
+    filters = {"name": name, "worse": "1" if worse else None, "release": release,
+               "kernel": kernel, "silent": silent}  # fmt: skip
+    return page(
+        request, "hosts.html", viewer, rows=rows, name_filter=name or "", worse=bool(worse),
+        release=release, kernel=kernel, silent=silent, releases=releases, error=error,
+        counts=release_counts(rows), filters=filters,
+    )  # fmt: skip
 
 
 @router.get("/hosts/{name}", response_class=HTMLResponse)
@@ -275,8 +339,17 @@ def map_queued_host(
     return _map(request, session, viewer, host, team, "/queue")
 
 
-SEARCH_FIELDS = ("host", "check", "severity", "words")
 SEVERITIES = ("critical", "warning", "info")
+
+
+def _date(text: str, label: str) -> date | None:
+    """A date typed in a form; ValueError naming LABEL if it isn't one."""
+    if not text.strip():
+        return None
+    try:
+        return date.fromisoformat(text.strip())
+    except ValueError:
+        raise ValueError(f"{label}: a date such as 2026-10-31.") from None
 
 
 @router.get("/search", response_class=HTMLResponse)
@@ -288,18 +361,35 @@ def search_page(
     check: str = "",
     severity: str = "",
     words: str = "",
+    since: Annotated[str, Query(alias="from")] = "",
+    until: Annotated[str, Query(alias="to")] = "",
     before: Before = None,
-) -> HTMLResponse:
-    form = {"host": host, "check": check, "severity": severity, "words": words}
+    format: str = "",
+) -> Response:
+    form = {"host": host, "check": check, "severity": severity, "words": words,
+            "from": since, "to": until}  # fmt: skip
     error = None
     hits: list[object] = []
     next_before = None
+    try:
+        first, last = _date(since, "From"), _date(until, "To")
+    except ValueError as exc:
+        error, first, last = str(exc), None, None
     if severity and severity not in SEVERITIES:
         error = f"Unknown severity {severity!r}: choose critical, warning or info."
-    elif any(form.values()):
+    if error is None and any(form.values()):
+        criteria = {
+            "host": host or None, "check": check or None, "severity": severity or None,
+            "words": words or None, "since": first, "until": last,
+        }  # fmt: skip
+        if format == "csv":
+            every = search_findings(session, viewer, **criteria, limit=MAX_ROWS)  # type: ignore[arg-type]
+            return csv_response("findings", FINDING_CSV, (
+                (h.report_id, h.host, h.generated_at.isoformat(), h.check_id, h.severity, h.title)
+                for h in every
+            ))  # fmt: skip
         found = search_findings(
-            session, viewer, host=host or None, check=check or None, severity=severity or None,
-            words=words or None, before=before, limit=PAGE_SIZE + 1,
+            session, viewer, **criteria, before=before, limit=PAGE_SIZE + 1,  # type: ignore[arg-type]
         )  # fmt: skip
         page_hits, next_before = page_of(found, PAGE_SIZE)
         hits = list(page_hits)

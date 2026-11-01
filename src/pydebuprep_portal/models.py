@@ -118,6 +118,8 @@ class Report(Base):
     tool_version: Mapped[str] = mapped_column(Text)
     config_stale: Mapped[bool]
     body: Mapped[str] = mapped_column(Text)
+    # pydebuprep's hash of the machine's /etc/machine-id (0.8.0 on); NULL before.
+    machine_id: Mapped[str | None] = mapped_column(Text)
     # NULL: the unassigned queue.
     team_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id"))
     # Set when the report was sent with another team's token (a flag for admins).
@@ -141,6 +143,8 @@ class Finding(Base):
     check_id: Mapped[str] = mapped_column(Text)
     severity: Mapped[str] = mapped_column(Text)
     title: Mapped[str] = mapped_column(Text)
+    # The detail and evidence lines, for searching more than titles.
+    text: Mapped[str] = mapped_column(Text, server_default="")
 
     report: Mapped[Report] = relationship(back_populates="findings")
 
