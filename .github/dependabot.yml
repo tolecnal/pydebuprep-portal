@@ -1,0 +1,48 @@
+version: 2
+updates:
+  # Pinned action SHAs in .github/workflows/*.yml
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # Wait before adopting a new release, so a compromised one can be pulled first.
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+
+  # Pinned, hashed dependencies in requirements*.txt (pydebuprep itself is pinned by
+  # release URL and moved by hand with each pydebuprep release)
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      python:
+        patterns: ["*"]
+    commit-message:
+      prefix: build
+
+  # The image's base (Dockerfile) and the compose files' images (PostgreSQL, the
+  # preview's Keycloak)
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build

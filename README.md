@@ -50,7 +50,9 @@ build-provenance attestation:
 
 ```sh
 gh attestation verify oci://ghcr.io/tolecnal/pydebuprep-portal:0.3.0 -R tolecnal/pydebuprep-portal
-``` Point the reverse proxy at it, and set
+```
+
+Point the reverse proxy at it, and set
 `PORTAL_BASE_URL` to the URL people and hosts use, for example
 `https://portal.example.com`. The portal builds its links and redirects from
 `PORTAL_BASE_URL`, so the proxy's `X-Forwarded-*` headers only give the logs the client's
@@ -208,6 +210,28 @@ The largest upload accepted is also on the **Settings** page (10 MiB by default)
 
 Every change to tokens, mappings, team visibility, retention and settings, and every
 deleted report, is in the **audit log** with who and when. Admins and auditors read it.
+
+## Hosts and search
+
+- **Hosts** lists every host with its newest report. Filter by the release or kernel of
+  that report (who is still on bookworm?), by no report in a number of days, or by a
+  newest report worse than the one before; the list counts hosts per release.
+- **Machines**: pydebuprep 0.8.0 and newer send a machine ID (a hash of
+  `/etc/machine-id`, never the ID itself). A host name that more than one machine
+  reports is flagged ("2 machines"), and the host's page shows which report came from
+  which machine.
+- **Search** finds findings by host, check, severity, words in the title, detail or
+  evidence, and the dates of their reports.
+- **CSV**: the reports, hosts and search pages download what they list (up to 10,000
+  rows). Cells that a spreadsheet would run as a formula are escaped.
+
+## Upgrading
+
+Each release lists in `CHANGELOG.md` what to know before upgrading. Upgrade the portal
+before its hosts' pydebuprep: a portal validates reports against the pydebuprep it is
+built on, and refuses fields a newer pydebuprep adds (portal 0.2.0 and older refuse the
+machine ID of pydebuprep 0.8.0). A newer portal takes reports from older pydebuprep.
+The portal migrates its database when it starts.
 
 ## The API
 
