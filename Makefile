@@ -39,7 +39,7 @@ test:
 db-up:
 	docker run -d --rm --name $(DB_CONTAINER) -p 127.0.0.1:55432:5432 \
 	  -e POSTGRES_DB=portal_test -e POSTGRES_USER=portal_test -e POSTGRES_PASSWORD=portal_test \
-	  postgres:17
+	  postgres:18
 	until docker exec $(DB_CONTAINER) pg_isready -q -U portal_test; do sleep 0.5; done
 
 db-down:

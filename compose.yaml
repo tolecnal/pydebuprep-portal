@@ -2,13 +2,13 @@
 #   docker compose up -d
 services:
   db:
-    image: postgres:17
+    image: postgres:18
     environment:
       POSTGRES_DB: portal
       POSTGRES_USER: portal
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
-      - db:/var/lib/postgresql/data
+      - postgres18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U portal -d portal"]
       interval: 2s
@@ -33,4 +33,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  db: {}
+  # PostgreSQL 18 keeps its data under /var/lib/postgresql/18/. Portals from before 0.4.0
+  # ran PostgreSQL 17 in the volume "db": scripts/upgrade-postgres-18.sh moves the
+  # database over and leaves that volume as it was.
+  postgres18: {}

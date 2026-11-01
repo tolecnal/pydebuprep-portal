@@ -34,7 +34,7 @@ for trying the portal out, never for real reports.
 
 ## Running it
 
-The portal runs as a Docker image (Debian 13, `debian:trixie-slim`) next to PostgreSQL,
+The portal runs as a Docker image (Debian 13, `debian:trixie-slim`) next to PostgreSQL 18,
 behind your own reverse proxy, which terminates TLS:
 
 ```sh
@@ -233,6 +233,23 @@ built on, and refuses fields a newer pydebuprep adds (portal 0.2.0 and older ref
 machine ID of pydebuprep 0.8.0). A newer portal takes reports from older pydebuprep.
 The portal migrates its database when it starts.
 
+### From PostgreSQL 17 (portals before 0.4.0)
+
+`compose.yaml` runs PostgreSQL 18, with its data in a new volume (`postgres18`);
+portals from before 0.4.0 ran PostgreSQL 17 in the volume `db`. A major version can't
+open the other's files, so move the database over once, where you run
+`docker compose`, after putting the new `compose.yaml` in place:
+
+```sh
+scripts/upgrade-postgres-18.sh     # PROJECT=<name> if you use docker compose -p
+```
+
+It stops the portal, dumps the database with a temporary PostgreSQL 17, restores it into
+PostgreSQL 18, compares the number of reports and the schema revision, and starts the
+portal again. It never touches the old volume: once the portal works, remove it with
+`docker volume rm <project>_db`. Run again, it says there is nothing to do; if the new
+release was started first (an empty PostgreSQL 18 database), it says how to start over.
+
 ## The API
 
 Everything is also available as an HTTP API under `/api/v1`, documented at `/docs`
@@ -252,7 +269,7 @@ secret may be read from a file instead: `PORTAL_SESSION_SECRET_FILE` and so on.
 
 ```sh
 make venv        # .venv with the locked dependencies
-make db-up       # PostgreSQL 17 in Docker on 127.0.0.1:55432
+make db-up       # PostgreSQL 18 in Docker on 127.0.0.1:55432
 make lint test   # ruff, mypy, bandit; pytest with 100 % coverage
 make lock        # after changing requirements*.in
 PYTHON=.venv/bin/python PYDEBUPREP=.venv/bin/pydebuprep scripts/smoke.sh

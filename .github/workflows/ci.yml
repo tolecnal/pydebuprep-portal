@@ -23,7 +23,7 @@ jobs:
         python: ["3.12", "3.13"]
     services:
       postgres:
-        image: postgres:17
+        image: postgres:18
         env:
           POSTGRES_DB: portal_test
           POSTGRES_USER: portal_test

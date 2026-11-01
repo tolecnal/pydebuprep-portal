@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **PostgreSQL 18** (was 17), in a new volume `postgres18`. Before starting this
+  release, move the database over with `scripts/upgrade-postgres-18.sh` (see
+  "Upgrading" in the README); the old volume `db` is left as it was. Started without
+  it, the portal comes up with an empty database, and the script says how to recover.
+  Tests, CI and `make db-up` use PostgreSQL 18 too.
 - The local preview's Keycloak is 26.8.1 (was 26.0.7).
 - Dependabot keeps the GitHub Actions, the pinned Python dependencies, the image's
   base and the compose files' images current, a week after each release.
