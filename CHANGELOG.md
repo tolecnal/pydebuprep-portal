@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.0 (2026-11-02)
+
+- Built on pydebuprep 0.9.0: the config generator offers its new checks (php,
+  certbot) and options (tls_probe, config_test, cert_warning_days,
+  cert_critical_days), and search can filter by them. Its reports are the same
+  format as 0.8.0's, so hosts may upgrade before or after the portal.
+- **Snapshots and upgrades**: the portal keeps what each report was compared with
+  (the snapshot's time, release and host) and which findings are changes since it.
+  - A report's page says what it was compared with ("an upgrade from 22.04 to
+    24.04"), counts and lists the changes since the snapshot apart from the problems
+    found now, and warns about a snapshot taken on the same release or another host.
+  - A host's page has a Snapshot column, so a multi-step upgrade reads as a chain.
+  - Search can keep only changes since the snapshot (`changes` on the page,
+    `changes_only` in the API); the search CSV has a `since_snapshot` column.
+  - The API's reports have `baseline`, `baseline_at`, `baseline_os_version`,
+    `baseline_host`, `changes` and `comparison`, and their `os_version` and
+    `machine_id`; findings have `since_baseline`.
+- The database migrates when the portal starts (`0005`): reports already stored get
+  their snapshot and changes from their own JSON.
+
 ## 0.4.0 (2026-11-01)
 
 - **PostgreSQL 18** (was 17), in a new volume `postgres18`. Before starting this

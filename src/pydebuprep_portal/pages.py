@@ -60,6 +60,7 @@ from pydebuprep_portal.mapping import (
 from pydebuprep_portal.models import Config, Host, Team
 from pydebuprep_portal.queries import (
     ReportRow,
+    comparison,
     delete_report,
     get_report,
     host_timeline,
@@ -146,9 +147,11 @@ def report_page(
     if report is None:
         return _not_found(request)
     may_delete = may_delete_reports(viewer, report.team.name if report.team else None)
+    changes = [f for f in report.findings if f.since_baseline]
     return page(
-        request, "report.html", viewer, report=report, formats=FORMATS, may_delete=may_delete
-    )
+        request, "report.html", viewer, report=report, formats=FORMATS, may_delete=may_delete,
+        compared=comparison(report), changes=changes,
+    )  # fmt: skip
 
 
 @router.post("/reports/{report_id}/delete", dependencies=[Depends(require_csrf)])
@@ -201,7 +204,7 @@ HOST_CSV = (
     "host", "release", "kernel", "newest report", "generated", "worst", "worst before",
     "machines",
 )  # fmt: skip
-FINDING_CSV = ("report", "host", "generated", "check", "severity", "finding")
+FINDING_CSV = ("report", "host", "generated", "check", "severity", "finding", "since_snapshot")
 MAX_SILENT_DAYS = 36_500
 
 
@@ -363,11 +366,12 @@ def search_page(
     words: str = "",
     since: Annotated[str, Query(alias="from")] = "",
     until: Annotated[str, Query(alias="to")] = "",
+    changes: str = "",
     before: Before = None,
     format: str = "",
 ) -> Response:
     form = {"host": host, "check": check, "severity": severity, "words": words,
-            "from": since, "to": until}  # fmt: skip
+            "from": since, "to": until, "changes": "1" if changes else ""}  # fmt: skip
     error = None
     hits: list[object] = []
     next_before = None
@@ -381,11 +385,13 @@ def search_page(
         criteria = {
             "host": host or None, "check": check or None, "severity": severity or None,
             "words": words or None, "since": first, "until": last,
+            "changes_only": bool(changes),
         }  # fmt: skip
         if format == "csv":
             every = search_findings(session, viewer, **criteria, limit=MAX_ROWS)  # type: ignore[arg-type]
             return csv_response("findings", FINDING_CSV, (
-                (h.report_id, h.host, h.generated_at.isoformat(), h.check_id, h.severity, h.title)
+                (h.report_id, h.host, h.generated_at.isoformat(), h.check_id, h.severity, h.title,
+                 "yes" if h.since_baseline else "no")
                 for h in every
             ))  # fmt: skip
         found = search_findings(

@@ -112,6 +112,7 @@ dl.facts dt { color: var(--muted); } dl.facts dd { margin: 0; }
 .stat .value { font-size: 1.6rem; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .stat.critical { --tone: var(--critical); } .stat.warning { --tone: var(--warning); }
 .stat.info { --tone: var(--info); } .stat.error { --tone: var(--muted); }
+.stat.changes { --tone: var(--accent); }
 
 /* Severities and flags */
 .sev { display: inline-flex; align-items: center; gap: .35em; font-size: .72rem; font-weight: 600; letter-spacing: .03em;
@@ -128,6 +129,14 @@ h1 .sev { font-size: .8rem; vertical-align: middle; margin-left: .4rem; }
           background: color-mix(in srgb, var(--warning) 7%, var(--surface)); border-radius: var(--radius-sm);
           padding: .7rem 1rem; margin: 1rem 0; }
 .notice > :first-child { margin-top: 0; } .notice > :last-child { margin-bottom: 0; }
+/* Snapshots: what a report was compared with */
+.flag.upgrade { color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+                background: var(--accent-soft); }
+.muted { color: var(--muted); }
+.compared { margin: 1rem 0; }
+.compared h2 { font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+               color: var(--muted); margin: 0 0 .3rem; }
+.compared p { margin: .3rem 0; }
 
 /* Forms */
 label { color: var(--fg); }

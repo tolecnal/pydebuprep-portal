@@ -185,7 +185,16 @@ def test_findings_as_csv_with_every_match(admin: TestClient, add_report: AddRepo
     for i in range(3):
         add_report(hostname=f"h{i}", findings=(("x", "warning", "=HYPERLINK(evil)"),))
     rows = rows_of(admin.get("/search", params={"words": "hyperlink", "format": "csv"}))
-    assert rows[0] == ["report", "host", "generated", "check", "severity", "finding"]
+    assert rows[0] == [
+        "report",
+        "host",
+        "generated",
+        "check",
+        "severity",
+        "finding",
+        "since_snapshot",
+    ]
+    assert {r[6] for r in rows[1:]} == {"no"}
     assert [r[1] for r in rows[1:]] == ["h2", "h1", "h0"]
     assert rows[1][5] == "'=HYPERLINK(evil)"
 

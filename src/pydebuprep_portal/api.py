@@ -168,6 +168,18 @@ class ReportSummary(BaseModel):
     config_stale: bool
     team: str | None = Field(description="None: the unassigned queue")
     flagged_team: str | None = Field(description="Sent with this other team's token")
+    machine_id: str | None = None
+    os_version: str
+    baseline: bool = Field(description="Compared with a snapshot (pydebuprep's baseline)")
+    baseline_at: datetime | None = Field(description="When that snapshot was taken")
+    baseline_os_version: str | None = Field(description="The OS version it was taken on")
+    baseline_host: str | None = Field(description="The host it was taken on")
+    changes: int = Field(description="Findings that are changes since the snapshot")
+    comparison: Literal["none", "upgrade", "same-release", "other-host", "compared"] = Field(
+        description="none: no snapshot; upgrade: taken on an older release; same-release: "
+        "maybe taken after the upgrade; other-host: a snapshot of another host; compared: "
+        "the snapshot didn't say its release"
+    )
 
     @classmethod
     def of(cls, row: ReportRow) -> ReportSummary:
@@ -181,7 +193,6 @@ class ReportList(BaseModel):
 
 class ReportDetail(ReportSummary):
     os_id: str
-    os_version: str
     codename: str
     tool_version: str
     token: str
@@ -216,7 +227,6 @@ def report(report_id: RowId, viewer: ViewerDep, session: SessionDep) -> ReportDe
     return ReportDetail(
         **report_row(found).__dict__,
         os_id=found.os_id,
-        os_version=found.os_version,
         codename=found.codename,
         tool_version=found.tool_version,
         token=found.token.name,
@@ -302,6 +312,7 @@ class FindingOut(BaseModel):
     check_id: str
     severity: str
     title: str
+    since_baseline: bool = Field(description="A change since the report's snapshot")
 
 
 class FindingList(BaseModel):
@@ -319,14 +330,17 @@ def findings(
     words: str | None = None,
     since: date | None = None,
     until: date | None = None,
+    changes_only: bool = False,
     before: Before = None,
 ) -> FindingList:
     """`host` matches part of a name; every one of `words` must appear in the title, the
     detail or the evidence. `since` and `until` are the first and last day (UTC) of the
-    reports."""
+    reports. `changes_only` keeps changes since the snapshot a report was compared
+    with."""
     hits = search_findings(
         session, viewer, host=host, check=check, severity=severity, words=words,
-        since=since, until=until, before=before, limit=PAGE_SIZE + 1,
+        since=since, until=until, changes_only=changes_only, before=before,
+        limit=PAGE_SIZE + 1,
     )  # fmt: skip
     hits, next_before = page_of(hits, PAGE_SIZE)
     return FindingList(findings=[FindingOut(**h.__dict__) for h in hits], next_before=next_before)

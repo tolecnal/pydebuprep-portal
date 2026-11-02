@@ -7,6 +7,7 @@ import json
 import zlib
 from datetime import UTC, datetime
 from functools import cache
+from typing import Any
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import best_match
@@ -215,8 +216,10 @@ def _insert(
         config_stale=data.config is not None and data.config.stale,
         body=text,
         machine_id=data.host.machine_id,
+        **_baseline(data),
     )
     for result in data.results:
+        changes = result.baseline_diff or []
         for finding in all_findings(result):
             report.findings.append(
                 Finding(
@@ -224,12 +227,31 @@ def _insert(
                     severity=finding.severity.value,
                     title=finding.title,
                     text=finding_text(finding.detail, finding.evidence),
+                    since_baseline=any(finding is c for c in changes),
                 )
             )
     session.add(report)
     _used(session, token.id, now)
     session.commit()
     return report
+
+
+def _baseline(data: ReportData) -> dict[str, Any]:
+    """The report's snapshot (pydebuprep calls it the baseline), as Report columns."""
+    b = data.baseline
+    if b is None:
+        return {"baseline": False}
+    try:
+        taken: datetime | None = _when(b.created_at)
+    except ValueError:
+        taken = None  # the snapshot's own field: shown as unknown rather than refused
+    return {
+        "baseline": True,
+        "baseline_at": taken,
+        "baseline_os_version": b.os_version or None,
+        "baseline_host": b.hostname or None,
+        "changes": sum(len(r.baseline_diff or []) for r in data.results),
+    }
 
 
 def finding_text(detail: str | None, evidence: list[str]) -> str:

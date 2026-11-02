@@ -235,3 +235,14 @@ def test_list_items_are_kept_as_typed() -> None:
     form = defaults_form()
     form["logs.ignore"] = " leading\r\ntrailing \r\n\r\n  \r\nx"
     assert values_from_form(form) == {"logs": {"ignore": [" leading", "trailing ", "x"]}}
+
+
+def test_offers_pydebuprep_0_9_0s_checks_and_options() -> None:
+    from pydebuprep_portal.generator import check_forms
+
+    forms = {form.id: {f.key for f in form.fields} for form in check_forms()}
+    assert {"php", "certbot"} <= set(forms)
+    for check in ("nginx", "apache"):
+        for option in ("tls_probe", "config_test", "cert_warning_days", "cert_critical_days"):
+            assert f"checks.{check}.{option}" in forms[check]
+    assert "checks.certbot.cert_warning_days" in forms["certbot"]

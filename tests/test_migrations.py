@@ -215,3 +215,61 @@ def test_upgrade_to_0004_fills_in_finding_text(engine: Engine, db_url: str) -> N
     ]
     with engine.connect() as conn:
         assert conn.execute(text("SELECT machine_id FROM reports")).scalars().all() == [None, None]
+
+
+def test_upgrade_from_0004_marks_snapshots_and_changes(engine: Engine, db_url: str) -> None:
+    import json
+
+    body = json.dumps({
+        "baseline": {"path": "/s.json", "created_at": "2026-10-09T20:00:00+00:00",
+                     "os_version": "22.04", "hostname": "web1"},
+        "results": [
+            {"id": "network", "findings": [{"title": "now"}], "baseline_diff": [{"title": "since"}]},
+            {"id": "fstab", "findings": [], "baseline_diff": []},
+        ],
+    })  # fmt: skip
+    naive = body.replace("+00:00", "")  # no zone: read as UTC, like an upload
+    config = migrations_config(db_url)
+    command.downgrade(config, "0004")
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("TRUNCATE hosts, tokens, reports, findings RESTART IDENTITY CASCADE"))
+            conn.execute(text(
+                "INSERT INTO hosts (name, first_seen, last_seen) VALUES ('web1', now(), now());"
+                "INSERT INTO tokens (kind, name, public_id, secret_hash, created_at, created_by)"
+                " VALUES ('global', 't', '0123abcd', 'x', now(), 'test')"
+            ))  # fmt: skip
+            report = (
+                "INSERT INTO reports (host_id, token_id, sha256, generated_at, received_at, worst,"
+                " critical, warning, info, error, os_id, os_version, codename, kernel,"
+                " tool_version, config_stale, body) VALUES (1, 1, :sha, now(), now(), 'warning',"
+                " 0, 2, 0, 0, 'ubuntu', '24.04', 'noble', '6.8', '0.8.0', false, :body)"
+            )
+            for sha, text_body, titles in (
+                ("a", body, ("now", "since")),
+                ("b", naive, ("now",)),  # findings don't match the body: left alone
+                ("c", "not json", ("x",)),
+                ("d", '{"baseline": {"created_at": "yesterday"}}', ()),
+            ):
+                conn.execute(text(report), {"sha": sha, "body": text_body})
+                for title in titles:
+                    conn.execute(text(
+                        "INSERT INTO findings (report_id, check_id, severity, title)"
+                        " SELECT max(id), 'network', 'warning', :t FROM reports"
+                    ), {"t": title})  # fmt: skip
+    finally:
+        command.upgrade(config, "head")
+    with engine.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT sha256, baseline, baseline_at, baseline_os_version, baseline_host, changes"
+            " FROM reports ORDER BY id"
+        )).all()  # fmt: skip
+        taken = datetime(2026, 10, 9, 20, 0, tzinfo=UTC)
+        assert rows == [
+            ("a", True, taken, "22.04", "web1", 1),
+            ("b", True, taken, "22.04", "web1", 0),
+            ("c", False, None, None, None, 0),
+            ("d", True, None, None, None, 0),
+        ]
+        flags = conn.execute(text("SELECT title, since_baseline FROM findings ORDER BY id")).all()
+        assert flags == [("now", False), ("since", True), ("now", False), ("x", False)]
