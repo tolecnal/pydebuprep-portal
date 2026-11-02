@@ -41,6 +41,28 @@ class ReportRow:
     team: str | None
     flagged_team: str | None  # sent with this other team's token
     machine_id: str | None = None
+    os_version: str = ""
+    # The snapshot it was compared with: see comparison().
+    baseline: bool = False
+    baseline_at: datetime | None = None
+    baseline_os_version: str | None = None
+    baseline_host: str | None = None
+    changes: int = 0
+    comparison: str = "none"
+
+
+def comparison(report: Report) -> str:
+    """What the report was compared with: "none" (no snapshot), "other-host" (a snapshot
+    of another host), "same-release" (taken on the release the report runs on: maybe
+    after the upgrade by mistake), "upgrade", or "compared" (the snapshot didn't say
+    its release)."""
+    if not report.baseline:
+        return "none"
+    if report.baseline_host and report.baseline_host.lower() != report.host.name:
+        return "other-host"
+    if not report.baseline_os_version:
+        return "compared"
+    return "same-release" if report.baseline_os_version == report.os_version else "upgrade"
 
 
 def visible(viewer: Viewer) -> ColumnElement[bool]:
@@ -76,6 +98,13 @@ def report_row(report: Report) -> ReportRow:
         team=report.team.name if report.team else None,
         flagged_team=report.token_team.name if report.token_team else None,
         machine_id=report.machine_id,
+        os_version=report.os_version,
+        baseline=report.baseline,
+        baseline_at=report.baseline_at,
+        baseline_os_version=report.baseline_os_version,
+        baseline_host=report.baseline_host,
+        changes=report.changes,
+        comparison=comparison(report),
     )
 
 
@@ -263,6 +292,7 @@ class FindingHit:
     check_id: str
     severity: str
     title: str
+    since_baseline: bool
 
 
 def search_findings(
@@ -275,11 +305,13 @@ def search_findings(
     words: str | None = None,
     since: date | None = None,
     until: date | None = None,
+    changes_only: bool = False,
     before: int | None = None,
     limit: int = 50,
 ) -> list[FindingHit]:
     """Findings, newest first; every word must appear in the title, the detail or the
-    evidence. SINCE and UNTIL are the first and last day (UTC) of the reports."""
+    evidence. SINCE and UNTIL are the first and last day (UTC) of the reports.
+    CHANGES_ONLY keeps changes since the snapshot a report was compared with."""
     query = (
         select(
             Finding.id,
@@ -289,6 +321,7 @@ def search_findings(
             Finding.check_id,
             Finding.severity,
             Finding.title,
+            Finding.since_baseline,
         )
         .join(Finding.report)
         .join(Report.host)
@@ -308,6 +341,8 @@ def search_findings(
         query = query.where(Report.generated_at >= _day_start(since))
     if until is not None:
         query = query.where(Report.generated_at < _day_start(until + timedelta(days=1)))
+    if changes_only:
+        query = query.where(Finding.since_baseline)
     if before is not None:
         query = query.where(Finding.id < before)
     return [FindingHit(*row) for row in session.execute(query)]

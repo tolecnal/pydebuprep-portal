@@ -38,11 +38,11 @@
 {% if machines | length > 1 %}
 <p class="notice">Reports with this host name come from {{ machines | length }} different machines (the code next to each report). Give each machine its own host name, or remove the reports of the one that shouldn't report here.</p>
 {% endif %}
-<p class="empty">Reports oldest first. A change of OS or kernel between reports that shouldn't be there may mean two machines report the same host name.</p>
+<p class="empty">Reports oldest first. The snapshot column says what each report was compared with: a snapshot taken before an upgrade, and how many of its findings are changes since. A change of OS or kernel between reports that shouldn't be there may mean two machines report the same host name.</p>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Report</th><th>Generated</th><th>Worst</th><th>Critical</th><th>Warning</th>
-    <th>Info</th><th>Errors</th><th>OS</th><th>Kernel</th></tr></thead>
+    <th>Info</th><th>Errors</th><th>OS</th><th>Kernel</th><th>Snapshot</th></tr></thead>
   <tbody>
   {% for row in rows %}
   <tr>
@@ -52,6 +52,7 @@
     <td class="num">{{ row.critical }}</td><td class="num">{{ row.warning }}</td>
     <td class="num">{{ row.info }}</td><td class="num">{{ row.error }}</td>
     <td>{{ row.os }}</td><td>{{ row.kernel }}</td>
+    <td>{% include "_snapshot_cell.html" %}</td>
   </tr>
   {% endfor %}
   </tbody>

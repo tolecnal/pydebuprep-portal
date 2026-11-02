@@ -49,7 +49,7 @@ builds the image from this checkout instead. Every released image carries a sign
 build-provenance attestation:
 
 ```sh
-gh attestation verify oci://ghcr.io/tolecnal/pydebuprep-portal:0.4.0 -R tolecnal/pydebuprep-portal
+gh attestation verify oci://ghcr.io/tolecnal/pydebuprep-portal:0.5.0 -R tolecnal/pydebuprep-portal
 ```
 
 Point the reverse proxy at it, and set
@@ -221,9 +221,31 @@ deleted report, is in the **audit log** with who and when. Admins and auditors r
   reports is flagged ("2 machines"), and the host's page shows which report came from
   which machine.
 - **Search** finds findings by host, check, severity, words in the title, detail or
-  evidence, and the dates of their reports.
+  evidence, and the dates of their reports; or only changes since a snapshot.
 - **CSV**: the reports, hosts and search pages download what they list (up to 10,000
   rows). Cells that a spreadsheet would run as a formula are escaped.
+
+## Snapshots and upgrades
+
+pydebuprep compares a report with a snapshot taken on the host before an upgrade
+(`sudo pydebuprep snapshot`). Snapshots stay on the host; a report says which one it
+was compared with, and which of its findings are changes since then, and the portal
+keeps that:
+
+- A report's page says what it was **compared with**: the snapshot's time, release
+  and host, and "an upgrade from 22.04 to 24.04" when the release changed. It counts
+  and lists the **changes since the snapshot** apart from the problems found now. It
+  warns when the snapshot was taken on the same release (maybe after the upgrade, by
+  mistake) or on another host, and says when there was no snapshot at all.
+- A host's page has a **Snapshot** column, so an upgrade in several steps reads as a
+  chain: `—` for a report without one, then `22.04 → 24.04 · 2 changes`, then
+  `24.04 → 26.04 · 1 change`. Take a snapshot before each step; each report compares
+  with the newest one.
+- Search can keep **only changes since the snapshot**; the API has the same filter
+  (`changes_only`) and each report's snapshot fields.
+
+Reports stored before 0.5.0 get their snapshot and changes from what they say when
+the portal migrates its database.
 
 ## Upgrading
 

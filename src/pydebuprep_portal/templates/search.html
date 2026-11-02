@@ -19,6 +19,7 @@
   <label>Words <input type="search" name="words" value="{{ form.words }}" placeholder="in the title, detail or evidence"></label>
   <label>From <input type="date" name="from" value="{{ form['from'] }}"></label>
   <label>To <input type="date" name="to" value="{{ form['to'] }}"></label>
+  <label class="check"><input type="checkbox" name="changes" value="1"{% if form.changes %} checked{% endif %}> Only changes since the snapshot</label>
   <button type="submit" class="primary">Search</button>
 </form>
 {% if error %}<p class="notice">{{ error }}</p>{% endif %}
@@ -34,7 +35,7 @@
     <td>{{ hit.generated_at | utc }}</td>
     <td>{{ hit.check_id }}</td>
     <td><span class="sev sev-{{ hit.severity }}">{{ hit.severity }}</span></td>
-    <td>{{ hit.title }}</td>
+    <td>{{ hit.title }}{% if hit.since_baseline %} <span class="flag upgrade" title="A change since the snapshot the report was compared with">since snapshot</span>{% endif %}</td>
   </tr>
   {% endfor %}
   </tbody>

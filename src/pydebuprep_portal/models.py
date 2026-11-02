@@ -35,6 +35,10 @@ DEFAULT_RETENTION_DAYS = 365
 DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
+# A server default for flags; also usable inside a class with a column named `text`.
+FALSE = text("false")
+
+
 class Team(Base):
     __tablename__ = "teams"
     __table_args__ = (
@@ -120,6 +124,15 @@ class Report(Base):
     body: Mapped[str] = mapped_column(Text)
     # pydebuprep's hash of the machine's /etc/machine-id (0.8.0 on); NULL before.
     machine_id: Mapped[str | None] = mapped_column(Text)
+    # The snapshot the report was compared with (pydebuprep's "baseline"): when it was
+    # taken, on which OS version and host. NULL fields when the report had none, or the
+    # snapshot didn't say.
+    baseline: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    baseline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    baseline_os_version: Mapped[str | None] = mapped_column(Text)
+    baseline_host: Mapped[str | None] = mapped_column(Text)
+    # How many of its findings are changes since that snapshot.
+    changes: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     # NULL: the unassigned queue.
     team_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id"))
     # Set when the report was sent with another team's token (a flag for admins).
@@ -145,6 +158,8 @@ class Finding(Base):
     title: Mapped[str] = mapped_column(Text)
     # The detail and evidence lines, for searching more than titles.
     text: Mapped[str] = mapped_column(Text, server_default="")
+    # A change since the snapshot the report was compared with, not a problem found now.
+    since_baseline: Mapped[bool] = mapped_column(Boolean, server_default=FALSE)
 
     report: Mapped[Report] = relationship(back_populates="findings")
 

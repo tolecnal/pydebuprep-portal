@@ -8,12 +8,36 @@
 {% if report.token_team %}
 <p class="notice">This report was sent with team {{ report.token_team.name }}'s token; the host belongs to {{ report.team.name if report.team else "no team" }}.</p>
 {% endif %}
+<section class="compared" aria-label="Compared with">
+<h2>Compared with</h2>
+{% if compared == "none" %}
+<p>No snapshot: this report shows the problems found now, not what changed since before an upgrade. Run <code>sudo pydebuprep snapshot</code> before the next upgrade, and the report after it compares with that.</p>
+{% else %}
+<p>The snapshot taken {% if report.baseline_at %}{{ report.baseline_at | utc }}{% else %}at an unknown time{% endif %}{% if report.baseline_os_version %} on {{ report.baseline_os_version }}{% endif %}{% if report.baseline_host %} ({{ report.baseline_host }}){% endif %}{% if compared == "upgrade" %}: an upgrade from {{ report.baseline_os_version }} to {{ report.os_version }}{% endif %}.</p>
+{% if compared == "same-release" %}<p class="notice">The snapshot was taken on the same release this report ran on: it may have been taken after the upgrade, so changes the upgrade made don't show.</p>{% endif %}
+{% if compared == "other-host" %}<p class="notice">The snapshot was taken on another host ({{ report.baseline_host }}): its changes compare two different machines.</p>{% endif %}
+{% endif %}
+</section>
 <div class="stats" aria-label="Findings">
   <div class="stat critical"><div class="label">Critical</div><div class="value">{{ report.critical }}</div></div>
   <div class="stat warning"><div class="label">Warning</div><div class="value">{{ report.warning }}</div></div>
   <div class="stat info"><div class="label">Info</div><div class="value">{{ report.info }}</div></div>
   <div class="stat error"><div class="label">Checks that failed to run</div><div class="value">{{ report.error }}</div></div>
+  {% if compared != "none" %}<div class="stat changes"><div class="label">Changes since the snapshot</div><div class="value">{{ report.changes }}</div></div>{% endif %}
 </div>
+{% if changes %}
+<h2>Changes since the snapshot</h2>
+<div class="table-wrap">
+<table id="changes">
+  <thead><tr><th>Check</th><th>Severity</th><th>Change</th></tr></thead>
+  <tbody>
+  {% for finding in changes %}
+  <tr><td>{{ finding.check_id }}</td><td><span class="sev sev-{{ finding.severity }}">{{ finding.severity }}</span></td><td>{{ finding.title }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
 <dl class="facts">
   <dt>Team</dt><dd>{{ report.team.name if report.team else "unassigned" }}</dd>
   <dt>Generated</dt><dd>{{ report.generated_at | utc }}</dd>

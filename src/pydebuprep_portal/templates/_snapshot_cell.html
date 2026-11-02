@@ -1,0 +1,7 @@
+{#- What a report (ROW, a ReportRow) was compared with, in a table cell. -#}
+{%- if row.comparison == "none" -%}<span class="muted" title="No snapshot: problems found now only">—</span>
+{%- elif row.comparison == "upgrade" -%}<span class="flag upgrade" title="Snapshot taken before the upgrade">{{ row.baseline_os_version }} → {{ row.os_version }}</span> {{ row.changes }} change{{ "" if row.changes == 1 else "s" }}
+{%- elif row.comparison == "same-release" -%}<span class="flag" title="The snapshot was taken on this release: maybe after the upgrade">same release</span> {{ row.changes }} change{{ "" if row.changes == 1 else "s" }}
+{%- elif row.comparison == "other-host" -%}<span class="flag" title="The snapshot was taken on another host">other host</span>
+{%- else -%}{{ row.changes }} change{{ "" if row.changes == 1 else "s" }}
+{%- endif -%}

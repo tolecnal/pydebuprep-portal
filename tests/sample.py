@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pydebuprep.model import (
+    BaselineInfo,
     CheckResult,
     ConfigInfo,
     Finding,
@@ -30,25 +31,34 @@ def sample_report(
     kernel: str = "6.12.0-1-amd64",
     stale: bool = False,
     machine_id: str | None = None,
+    baseline: BaselineInfo | None = None,
+    changes: tuple[tuple[str, str, str], ...] = (),
 ) -> Report:
     """FINDINGS are (check, severity, title), optionally followed by a detail and
-    evidence lines."""
+    evidence lines. CHANGES are (check, severity, title) differences from BASELINE, the
+    snapshot the report was compared with."""
     by_check: dict[str, list[Finding]] = {}
     for check, severity, title, *more in findings:
         detail = more[0] if more else ""
         by_check.setdefault(check, []).append(
             Finding(Severity(severity), title, detail=detail, evidence=list(more[1:]))
         )
+    diffs: dict[str, list[Finding]] = {}
+    for check, severity, title in changes:
+        diffs.setdefault(check, []).append(Finding(Severity(severity), title))
     results = [
-        CheckResult(check, check, "system", Status.FINDINGS, findings=items)
-        for check, items in by_check.items()
-    ]
+        CheckResult(
+            check, check, "system", Status.FINDINGS, findings=by_check.get(check, []),
+            baseline_diff=diffs.get(check, []) if baseline else None,
+        )
+        for check in dict.fromkeys([*by_check, *diffs])
+    ]  # fmt: skip
     results.append(CheckResult("fstab", "fstab", "storage", Status.OK))
     return Report(
         tool={"name": "pydebuprep", "version": "0.5.0"},
         generated_at=generated_at,
         host=Host(hostname, "debian", os_version, codename, kernel, True, machine_id),
-        baseline=None,
+        baseline=baseline,
         summary=compute_summary(results),
         results=results,
         config=ConfigInfo("https://portal.test/c", generated_at, True) if stale else None,
