@@ -64,7 +64,7 @@ def create_app(settings: Settings, engine: Engine | None = None) -> FastAPI:
     app.include_router(api.router)
     app.include_router(auth.router)
     app.include_router(pages.router)
-    app.add_middleware(SecurityHeaders)
+    app.add_middleware(SecurityHeaders, hsts=settings.base_url.startswith("https://"))
 
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> dict[str, str]:

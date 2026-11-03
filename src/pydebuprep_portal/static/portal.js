@@ -1,7 +1,12 @@
 (() => {
   const root = document.documentElement;
   const key = "portal_theme";
-  const saved = localStorage.getItem(key);
+  // Runs in <head>, before the body is drawn, so a saved theme never flashes the other.
+  // localStorage may be blocked (private windows, site data off): then the system's.
+  let saved = null;
+  try {
+    saved = localStorage.getItem(key);
+  } catch (_) {}
   if (saved === "light" || saved === "dark") {
     root.dataset.theme = saved;
   }
@@ -14,7 +19,9 @@
         (!root.dataset.theme && window.matchMedia("(prefers-color-scheme: dark)").matches);
       const next = dark ? "light" : "dark";
       root.dataset.theme = next;
-      localStorage.setItem(key, next);
+      try {
+        localStorage.setItem(key, next);
+      } catch (_) {}
       return;
     }
 

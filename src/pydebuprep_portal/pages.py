@@ -59,6 +59,7 @@ from pydebuprep_portal.mapping import (
 )
 from pydebuprep_portal.models import Config, Host, Team
 from pydebuprep_portal.queries import (
+    MAX_WORDS_LENGTH,
     ReportRow,
     comparison,
     delete_report,
@@ -383,6 +384,8 @@ def search_page(
         error, first, last = str(exc), None, None
     if severity and severity not in SEVERITIES:
         error = f"Unknown severity {severity!r}: choose critical, warning or info."
+    if len(words) > MAX_WORDS_LENGTH:
+        error = f"Words: at most {MAX_WORDS_LENGTH} characters."
     if error is None and any(form.values()):
         criteria = {
             "host": host or None, "check": check or None, "severity": severity or None,

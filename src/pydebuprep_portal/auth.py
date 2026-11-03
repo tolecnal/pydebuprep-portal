@@ -42,6 +42,11 @@ class SignInRequired(Exception):
         self.next_path = next_path
 
 
+# Seconds for each request to the identity provider (metadata, tokens, JWKS), so a
+# provider that stops answering can't hold sign-ins and API calls open.
+OIDC_TIMEOUT = 10.0
+
+
 def make_oauth(settings: Settings) -> OAuth:
     oauth = OAuth()
     oauth.register(
@@ -49,7 +54,7 @@ def make_oauth(settings: Settings) -> OAuth:
         client_id=settings.oidc_client_id,
         client_secret=settings.oidc_client_secret,
         server_metadata_url=settings.oidc_metadata_url,
-        client_kwargs={"scope": "openid profile email"},
+        client_kwargs={"scope": "openid profile email", "timeout": OIDC_TIMEOUT},
     )
     return oauth
 

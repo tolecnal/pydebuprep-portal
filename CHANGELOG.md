@@ -6,8 +6,8 @@
   - A light/dark theme toggle in the sidebar header (`localStorage` + `data-theme`) and
     one-click `Copy` buttons on newly created tokens, config CLI commands, rendered YAML
     configs, and report machine IDs.
-  - Fleet summary tiles at the top of `/hosts` (total hosts, critical, warning, OK, and
-    worse than before), plus `customized` badges on checks with non-default options in
+  - Fleet summary tiles at the top of `/hosts` (total hosts, critical, warning, info, OK,
+    and worse than before), plus `customized` badges on checks with non-default options in
     the config generator and status badges for token state and team visibility.
   - Refined card elevation, glowing severity indicator dots, gradient-tinted stat cards,
     and dimmed zero-count cells in report and host timeline tables so non-zero findings
@@ -15,11 +15,16 @@
 - **Security hardening**:
   - Host names in the unassigned queue HTMX targets are URL-encoded, and post-sign-in
     redirect paths reject control characters (`\r`, `\n`, `\t`, NUL).
-  - Decompressed upload size is enforced incrementally while streaming gzip payloads,
-    OIDC JWKS HTTP fetches use explicit timeouts, and spreadsheet formula escaping in CSV
-    exports also covers leading whitespace before `=`, `+`, `-`, `@`.
-  - Search word count and length are bounded, and non-local `PORTAL_BASE_URL` settings
-    enable HSTS (`Strict-Transport-Security`) and `https_only` session cookies.
+  - Host names `.` and `..`, and names with `/` or `\`, are refused on upload; NUL
+    characters are looked for in the report exactly as sent.
+  - Every request to the identity provider (metadata, tokens, JWKS) times out after 10
+    seconds, and sign-in checks the ID token's issuer against `PORTAL_OIDC_ISSUER`.
+  - Spreadsheet formula escaping in CSV exports also covers leading spaces before `=`,
+    `+`, `-`, `@`, and a leading newline.
+  - Search takes at most 20 distinct words and 200 characters, on the page and in the API.
+  - A portal whose `PORTAL_BASE_URL` is https sends HSTS
+    (`Strict-Transport-Security: max-age=31536000`). Session cookies were already
+    `https_only` unless `PORTAL_ALLOW_HTTP` is set.
 - **Performance**: report list and host timeline queries defer the full JSON `Report.body`
   column, `worse_only` host filtering is pushed down into SQL, and database connection
   pooling is tuned explicitly.

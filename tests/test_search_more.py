@@ -210,3 +210,9 @@ def test_reports_as_csv(admin: TestClient, fleet: None) -> None:
     rows = rows_of(admin.get("/", params={"format": "csv"}))
     assert rows[0][:3] == ["report", "host", "team"]
     assert len(rows) == 5
+
+
+def test_search_page_bounds_word_length(admin: TestClient) -> None:
+    resp = admin.get("/search", params={"words": "a" * 201})
+    assert resp.status_code == 200 and "Words: at most 200 characters" in resp.text
+    assert "Words: at most" not in admin.get("/search", params={"words": "a" * 200}).text

@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
 PAGE_CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -17,11 +18,22 @@ PAGE_CSP = (
 )
 
 
+# Sent only when the portal's base URL is https: browsers then never try plain HTTP.
+HSTS = "max-age=31536000"
+
+
 class SecurityHeaders(BaseHTTPMiddleware):
-    """PAGE_CSP unless the route set its own, plus nosniff and a same-origin referrer."""
+    """PAGE_CSP unless the route set its own, plus nosniff, a same-origin referrer and,
+    behind https, HSTS."""
+
+    def __init__(self, app: ASGIApp, hsts: bool = False) -> None:
+        super().__init__(app)
+        self.hsts = hsts
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response = await call_next(request)
+        if self.hsts:
+            response.headers["Strict-Transport-Security"] = HSTS
         response.headers.setdefault("Content-Security-Policy", PAGE_CSP)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"

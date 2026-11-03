@@ -44,6 +44,7 @@ from pydebuprep_portal.ingest import IngestError, check_headers, read_body, stor
 from pydebuprep_portal.mapping import MappingError, map_host, queue, queue_visible, unmap_host
 from pydebuprep_portal.models import Config, Host, Team, Token
 from pydebuprep_portal.queries import (
+    MAX_WORDS_LENGTH,
     ReportRow,
     delete_report,
     get_report,
@@ -327,7 +328,7 @@ def findings(
     host: str | None = None,
     check: str | None = None,
     severity: Literal["critical", "warning", "info"] | None = None,
-    words: Annotated[str | None, Query(max_length=200)] = None,
+    words: Annotated[str | None, Query(max_length=MAX_WORDS_LENGTH)] = None,
     since: date | None = None,
     until: date | None = None,
     changes_only: bool = False,

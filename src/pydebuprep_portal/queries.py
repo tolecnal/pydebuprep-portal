@@ -310,6 +310,7 @@ class FindingHit:
 
 
 MAX_SEARCH_WORDS = 20
+MAX_WORDS_LENGTH = 200  # characters, in the search page's and the API's words
 
 
 def search_findings(

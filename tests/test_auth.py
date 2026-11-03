@@ -256,3 +256,13 @@ def test_metadata_from_an_internal_url(make_client, stub: OIDCStub) -> None:  # 
     assert client.get("/login", follow_redirects=False).status_code == 302
     assert login(client, stub).status_code == 400
     assert login(client, stub, iss=issuer).status_code == 303
+
+
+def test_identity_provider_requests_time_out() -> None:
+    # Metadata, token and JWKS requests all use these client options (authlib).
+    from conftest import test_settings
+    from pydebuprep_portal.auth import OIDC_TIMEOUT, make_oauth
+
+    client = make_oauth(test_settings()).oidc  # type: ignore[attr-defined]
+    assert client.client_kwargs["timeout"] == OIDC_TIMEOUT
+    assert 0 < OIDC_TIMEOUT <= 30

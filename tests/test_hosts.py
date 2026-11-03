@@ -111,3 +111,16 @@ def test_hosts_api(admin: TestClient, add_report: AddReport, bearer: Bearer) -> 
     member = bearer()
     assert admin.get("/api/v1/hosts", headers=member).json()["hosts"] == []
     assert admin.get("/api/v1/hosts/a/timeline", headers=member).status_code == 404
+
+
+def test_fleet_tiles_count_every_host(admin: TestClient, add_report: AddReport) -> None:
+    add_report(hostname="c", findings=(("disk-space", "critical", "Disk is full"),))
+    add_report(hostname="w", findings=WARN)
+    add_report(hostname="i", findings=(("kernel", "info", "A newer kernel is installed"),))
+    add_report(hostname="o", findings=OK)
+    page = admin.get("/hosts").text
+    tiles = dict(
+        re.findall(r'<div class="label">([^<]+)</div><div class="value">(\d+)</div>', page)
+    )
+    assert tiles["Hosts"] == "4"
+    assert [tiles[k] for k in ("Critical", "Warning", "Info", "OK")] == ["1", "1", "1", "1"]
