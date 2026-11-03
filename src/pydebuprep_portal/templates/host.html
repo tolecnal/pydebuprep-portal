@@ -49,8 +49,8 @@
     <td><a href="/reports/{{ row.id }}">#{{ row.id }}</a>{% if row.machine_id %} <code class="machine" title="Machine {{ row.machine_id }}">{{ row.machine_id[:8] }}</code>{% endif %}{% if row.config_stale %} <span class="flag">stale config</span>{% endif %}</td>
     <td>{{ row.generated_at | utc }}</td>
     <td><span class="sev sev-{{ row.worst }}">{{ row.worst }}</span></td>
-    <td class="num">{{ row.critical }}</td><td class="num">{{ row.warning }}</td>
-    <td class="num">{{ row.info }}</td><td class="num">{{ row.error }}</td>
+    <td class="num {{ 'zero' if row.critical == 0 else 'tone-critical' }}">{{ row.critical }}</td><td class="num {{ 'zero' if row.warning == 0 else 'tone-warning' }}">{{ row.warning }}</td>
+    <td class="num {{ 'zero' if row.info == 0 else 'tone-info' }}">{{ row.info }}</td><td class="num {{ 'zero' if row.error == 0 else 'tone-error' }}">{{ row.error }}</td>
     <td>{{ row.os }}</td><td>{{ row.kernel }}</td>
     <td>{% include "_snapshot_cell.html" %}</td>
   </tr>

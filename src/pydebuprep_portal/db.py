@@ -33,7 +33,7 @@ class Base(DeclarativeBase):
 
 
 def make_engine(url: str) -> Engine:
-    return create_engine(url, pool_pre_ping=True)
+    return create_engine(url, pool_pre_ping=True, pool_size=10, max_overflow=20)
 
 
 def make_sessionmaker(engine: Engine) -> sessionmaker[Session]:
@@ -52,4 +52,5 @@ def get_session(request: Request) -> Iterator[Session]:
     """A session per request (FastAPI dependency)."""
     maker: sessionmaker[Session] = request.app.state.sessionmaker
     with maker() as session:
+        request.state.session = session
         yield session

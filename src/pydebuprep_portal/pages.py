@@ -253,7 +253,9 @@ def hosts_page(
              r.worst, r.previous_worst, r.machines)
             for r in rows
         ))  # fmt: skip
-    releases = sorted({(r.codename, r.release) for r in list_hosts(session, viewer)})
+    filtered = bool(name or worse or release or kernel or days is not None)
+    all_rows = list_hosts(session, viewer) if filtered else rows
+    releases = sorted({(r.codename, r.release) for r in all_rows})
     filters = {"name": name, "worse": "1" if worse else None, "release": release,
                "kernel": kernel, "silent": silent}  # fmt: skip
     return page(
@@ -624,7 +626,7 @@ def host_retention_page(
         set_retention(session, actor_of(viewer), host=host, **_named(_retention_form(mode, days)))
     except ValueError as exc:
         return error_page(request, 422, "Not saved", str(exc))
-    return RedirectResponse(f"/hosts/{host.name}", status_code=303)
+    return RedirectResponse(_host_url(session, host.name), status_code=303)
 
 
 def _named(value: tuple[int | None, bool]) -> dict[str, Any]:

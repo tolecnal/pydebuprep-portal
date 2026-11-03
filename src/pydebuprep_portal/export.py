@@ -10,14 +10,14 @@ from fastapi.responses import Response
 
 # Spreadsheets run a cell that starts with one of these as a formula; host names,
 # finding titles and evidence come from the hosts, so none may.
-FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+FORMULA_START = ("=", "+", "-", "@", "\t", "\r", "\n")
 # More than any page shows; a CSV is for taking everything that matches elsewhere.
 MAX_ROWS = 10_000
 
 
 def csv_cell(value: object) -> str:
     text = "" if value is None else str(value)
-    return "'" + text if text.startswith(FORMULA_START) else text
+    return "'" + text if text.lstrip(" ").startswith(FORMULA_START) else text
 
 
 def csv_response(name: str, header: Sequence[str], rows: Iterable[Sequence[object]]) -> Response:

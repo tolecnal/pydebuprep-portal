@@ -68,7 +68,12 @@ def safe_next(value: object) -> str:
     """A local path to return to after signing in; anything else becomes /."""
     if not isinstance(value, str):
         return "/"
-    local = value.startswith("/") and not value.startswith("//") and "\\" not in value
+    local = (
+        value.startswith("/")
+        and not value.startswith("//")
+        and "\\" not in value
+        and value.isprintable()
+    )
     return value if local else "/"
 
 
@@ -107,15 +112,18 @@ async def login(request: Request, next: str | None = None) -> Response:
 
 @router.get("/auth/callback")
 async def callback(request: Request) -> Response:
+    settings = _settings(request)
     try:
-        token = await _client(request).authorize_access_token(request)  # type: ignore[no-untyped-call]
+        token = await _client(request).authorize_access_token(  # type: ignore[no-untyped-call]
+            request, claims_options={"iss": {"values": [settings.oidc_issuer]}}
+        )
         claims = dict(token["userinfo"])
     except (OAuthError, JoseError, httpx.HTTPError, KeyError, TypeError, ValueError):
         return error_page(
             request, 400, "Sign-in failed", "The sign-in could not be completed. Try again."
         )
     next_path = safe_next(request.session.get("next"))
-    viewer = _viewer(claims, _settings(request))
+    viewer = _viewer(claims, settings)
     user = {
         "sub": viewer.subject,
         "name": viewer.name,

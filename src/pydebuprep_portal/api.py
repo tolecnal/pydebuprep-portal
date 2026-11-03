@@ -327,7 +327,7 @@ def findings(
     host: str | None = None,
     check: str | None = None,
     severity: Literal["critical", "warning", "info"] | None = None,
-    words: str | None = None,
+    words: Annotated[str | None, Query(max_length=200)] = None,
     since: date | None = None,
     until: date | None = None,
     changes_only: bool = False,

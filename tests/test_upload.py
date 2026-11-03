@@ -119,7 +119,10 @@ def test_bad_bodies_are_422(api: TestClient, token: str, db: Session, body: byte
     assert db.query(Report).count() == 0
 
 
-@pytest.mark.parametrize("hostname", ["", "   ", "a" * 254, "web 1", "web\x001"])
+@pytest.mark.parametrize(
+    "hostname",
+    ["", "   ", "a" * 254, "web 1", "web\x001", ".", "..", "web/1", "web\\1"],
+)
 def test_bad_hostnames_are_422(api: TestClient, token: str, hostname: str) -> None:
     resp = post(api, token, sample_json(hostname=hostname).encode())
     assert resp.status_code == 422

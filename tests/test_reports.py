@@ -235,3 +235,19 @@ def test_host_links_are_percent_encoded(admin: TestClient, add_report: AddReport
     page = admin.get("/").text
     assert 'href="/hosts/web%231%3Fx"' in page
     assert admin.get("/hosts/web%231%3Fx").status_code == 200
+
+
+def test_list_queries_defer_report_body(add_report: AddReport, db) -> None:  # type: ignore[no-untyped-def]
+    from sqlalchemy import inspect
+
+    from pydebuprep_portal.access import Viewer
+    from pydebuprep_portal.queries import get_report, list_reports
+
+    viewer = Viewer("a", "Admin", frozenset({"admin"}))
+    stored = add_report(hostname="web1")
+    db.expire_all()
+    list_reports(db, viewer)
+    assert "body" not in inspect(stored).dict
+    db.expire_all()
+    single = get_report(db, viewer, stored.id)
+    assert single is not None and "body" in inspect(single).dict

@@ -16,7 +16,7 @@
       {% for level in severities %}<option value="{{ level }}"{% if form.severity == level %} selected{% endif %}>{{ level }}</option>{% endfor %}
     </select>
   </label>
-  <label>Words <input type="search" name="words" value="{{ form.words }}" placeholder="in the title, detail or evidence"></label>
+  <label>Words <input type="search" name="words" value="{{ form.words }}" maxlength="200" placeholder="in the title, detail or evidence"></label>
   <label>From <input type="date" name="from" value="{{ form['from'] }}"></label>
   <label>To <input type="date" name="to" value="{{ form['to'] }}"></label>
   <label class="check"><input type="checkbox" name="changes" value="1"{% if form.changes %} checked{% endif %}> Only changes since the snapshot</label>

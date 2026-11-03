@@ -119,6 +119,9 @@ def test_words_match_details_and_evidence(db: Session, add_report: AddReport) ->
     hits = search_findings(db, ADMIN, words="php7.4-fpm")
     assert [h.check_id for h in hits] == ["nginx"]
     assert [h.check_id for h in search_findings(db, ADMIN, words="requests fail")] == ["nginx"]
+    assert [h.check_id for h in search_findings(db, ADMIN, words="requests REQUESTS fail")] == [
+        "nginx"
+    ]
     assert search_findings(db, ADMIN, words="php7.4 missingword") == []
 
 
@@ -145,12 +148,15 @@ def test_search_page_dates(admin: TestClient, add_report: AddReport) -> None:
 def test_search_api_dates(admin: TestClient, bearer: Bearer, add_report: AddReport) -> None:
     add_report(hostname="a", generated_at=day(1), findings=DETAILED[1:])
     add_report(hostname="b", generated_at=day(15), findings=DETAILED[1:])
+    headers = bearer("pydebuprep-admins")
     data = admin.get(
         "/api/v1/search/findings",
         params={"until": "2026-10-10"},
-        headers=bearer("pydebuprep-admins"),
+        headers=headers,
     ).json()
     assert [f["host"] for f in data["findings"]] == ["a"]
+    too_long = admin.get("/api/v1/search/findings", params={"words": "a" * 201}, headers=headers)
+    assert too_long.status_code == 422
 
 
 # --- CSV -----------------------------------------------------------------------------
@@ -165,7 +171,8 @@ def rows_of(response: object) -> list[list[str]]:
 @pytest.mark.parametrize(
     ("value", "cell"),
     [("=1+1", "'=1+1"), ("+x", "'+x"), ("-x", "'-x"), ("@x", "'@x"), ("\tx", "'\tx"),
-     ("web1", "web1"), (3, "3"), (None, "")],
+     ("\rx", "'\rx"), ("\nx", "'\nx"), (" =1+1", "' =1+1"), ("web1", "web1"), (3, "3"),
+     (None, "")],
 )  # fmt: skip
 def test_cells_never_start_a_formula(value: object, cell: str) -> None:
     assert csv_cell(value) == cell
