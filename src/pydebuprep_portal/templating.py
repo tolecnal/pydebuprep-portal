@@ -50,5 +50,4 @@ def _leads_map(request: Request) -> bool:
     """Whether leads may map hosts now: they see the queue only then."""
     from pydebuprep_portal.settings_store import get_settings
 
-    with request.app.state.sessionmaker() as session:
-        return not get_settings(session).only_admins_map
+    return not get_settings(request.state.session).only_admins_map

@@ -22,9 +22,16 @@ def test_host_forms_redirect_to_the_stored_host(
 ) -> None:
     make_team(db, "web")
     add_report(hostname="q1")
+    add_report(hostname="web#1?x")
     admin = signed_in("pydebuprep-admins")
+    assert 'action="/queue/web%231%3Fx/map"' in admin.get("/queue").text
     assert _post(admin, "/hosts/Q1/map", team="web") == (303, "/hosts/q1")
     assert _post(admin, "/hosts/Q1/unmap") == (303, "/hosts/q1")
+    assert _post(admin, "/hosts/Q1/retention", mode="forever") == (303, "/hosts/q1")
+    assert _post(admin, "/hosts/web%231%3Fx/retention", mode="forever") == (
+        303,
+        "/hosts/web%231%3Fx",
+    )
     assert _post(admin, "/queue/Q1/map", team="web") == (303, "/queue")
 
 

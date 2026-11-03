@@ -7,8 +7,15 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Protocol
 
-from sqlalchemy import ColumnElement, Select, func, or_, select, true
-from sqlalchemy.orm import InstrumentedAttribute, Session, aliased, contains_eager, joinedload
+from sqlalchemy import ColumnElement, Select, case, func, or_, select, true
+from sqlalchemy.orm import (
+    InstrumentedAttribute,
+    Session,
+    aliased,
+    contains_eager,
+    defer,
+    joinedload,
+)
 
 from pydebuprep_portal.access import Viewer, may_delete_reports
 from pydebuprep_portal.audit import record
@@ -132,7 +139,7 @@ def list_reports(
     limit: int = 50,
 ) -> list[ReportRow]:
     """Newest received first; TEAM is a team's name or "unassigned" for the queue."""
-    query = _reports(viewer).order_by(Report.id.desc()).limit(limit)
+    query = _reports(viewer).options(defer(Report.body)).order_by(Report.id.desc()).limit(limit)
     if team == UNASSIGNED:
         query = query.where(Report.team_id.is_(None))
     elif team is not None:
@@ -247,7 +254,12 @@ def list_hosts(
     if silent_days is not None:
         cutoff = (now or datetime.now().astimezone()) - timedelta(days=silent_days)
         query = query.where(newest.c.generated_at < cutoff)
-    rows = [
+    if worse_only:
+        query = query.where(
+            case(SEVERITY_ORDER, value=newest.c.worst)
+            > case(SEVERITY_ORDER, value=previous.c.worst)
+        )
+    return [
         HostRow(
             name=host,
             last_report_id=report_id,
@@ -265,7 +277,6 @@ def list_hosts(
             kernel_name,
         ) in session.execute(query)
     ]  # fmt: skip
-    return [r for r in rows if r.worse] if worse_only else rows
 
 
 def release_counts(rows: list[HostRow]) -> list[tuple[str, int]]:
@@ -277,7 +288,10 @@ def release_counts(rows: list[HostRow]) -> list[tuple[str, int]]:
 def host_timeline(session: Session, viewer: Viewer, name: str) -> list[ReportRow] | None:
     """A host's reports, oldest first; None if it has none the viewer may see."""
     query = (
-        _reports(viewer).where(Host.name == name.lower()).order_by(Report.generated_at, Report.id)
+        _reports(viewer)
+        .options(defer(Report.body))
+        .where(Host.name == name.lower())
+        .order_by(Report.generated_at, Report.id)
     )
     rows = [report_row(r) for r in session.scalars(query)]
     return rows or None
@@ -293,6 +307,10 @@ class FindingHit:
     severity: str
     title: str
     since_baseline: bool
+
+
+MAX_SEARCH_WORDS = 20
+MAX_WORDS_LENGTH = 200  # characters, in the search page's and the API's words
 
 
 def search_findings(
@@ -335,7 +353,7 @@ def search_findings(
         query = query.where(Finding.check_id == check)
     if severity:
         query = query.where(Finding.severity == severity)
-    for word in (words or "").split():
+    for word in list(dict.fromkeys((words or "").lower().split()))[:MAX_SEARCH_WORDS]:
         query = query.where(or_(_contains(Finding.title, word), _contains(Finding.text, word)))
     if since is not None:
         query = query.where(Report.generated_at >= _day_start(since))

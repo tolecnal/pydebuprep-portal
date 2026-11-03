@@ -3,7 +3,7 @@
 {% block main %}
 <h1>Config {{ team }}/{{ config.name }}</h1>
 <p>Hosts run with it as root, with their upload token in <code>/etc/pydebuprep/token</code>:</p>
-<pre class="command">sudo pydebuprep --config {{ url }}</pre>
+<div class="copy-box"><pre class="command">sudo pydebuprep --config {{ url }}</pre><button type="button" class="small copy-btn" data-copy="sudo pydebuprep --config {{ url }}">Copy</button></div>
 {% if problems %}<div class="notice"><p>The newest version no longer passes pydebuprep's rules, so hosts get an error and keep using their saved copy. Save the config again to fix it:</p><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
 {% if unchanged %}<p class="notice">No changes: the config is what it was.</p>{% endif %}
 {% if errors %}<div class="notice"><p>Not saved:</p><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
@@ -15,8 +15,9 @@
     {% set f = logs_field %}{% include "_field.html" %}
     <h2>Checks</h2>
     {% for form in check_forms %}
+    {% set ns = namespace(custom=false) %}{% for f in form.fields[1:] %}{% if shown[f.key] != f.default %}{% set ns.custom = true %}{% endif %}{% endfor %}
     <details class="check">
-      <summary>{{ form.title }} <span class="empty">({{ form.id }}; {{ form.notes }})</span>{% if not shown["checks." ~ form.id ~ ".enabled"] %} <span class="flag">off</span>{% endif %}</summary>
+      <summary>{{ form.title }} <span class="empty">({{ form.id }}; {{ form.notes }})</span>{% if not shown["checks." ~ form.id ~ ".enabled"] %} <span class="flag">off</span>{% endif %}{% if ns.custom %} <span class="flag upgrade">customized</span>{% endif %}</summary>
       {% for f in form.fields %}{% include "_field.html" %}{% endfor %}
     </details>
     {% endfor %}
@@ -24,7 +25,7 @@
   {% if may_edit %}<button type="submit" class="primary">Save as a new version</button>{% endif %}
 </form>
 <h2>What hosts get now</h2>
-<pre class="yaml">{{ yaml }}</pre>
+<div class="copy-box"><pre class="yaml">{{ yaml }}</pre><button type="button" class="small copy-btn" data-copy="{{ yaml }}">Copy</button></div>
 <h2>Versions</h2>
 <ul class="versions">
 {% for v in versions %}<li><a href="/configs/{{ team }}/{{ config.name }}/versions/{{ v.version }}">version {{ v.version }}</a> — {{ v.created_at | utc }}, {{ v.created_by }}</li>{% endfor %}

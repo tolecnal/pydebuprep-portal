@@ -59,6 +59,7 @@ from pydebuprep_portal.mapping import (
 )
 from pydebuprep_portal.models import Config, Host, Team
 from pydebuprep_portal.queries import (
+    MAX_WORDS_LENGTH,
     ReportRow,
     comparison,
     delete_report,
@@ -253,7 +254,9 @@ def hosts_page(
              r.worst, r.previous_worst, r.machines)
             for r in rows
         ))  # fmt: skip
-    releases = sorted({(r.codename, r.release) for r in list_hosts(session, viewer)})
+    filtered = bool(name or worse or release or kernel or days is not None)
+    all_rows = list_hosts(session, viewer) if filtered else rows
+    releases = sorted({(r.codename, r.release) for r in all_rows})
     filters = {"name": name, "worse": "1" if worse else None, "release": release,
                "kernel": kernel, "silent": silent}  # fmt: skip
     return page(
@@ -381,6 +384,8 @@ def search_page(
         error, first, last = str(exc), None, None
     if severity and severity not in SEVERITIES:
         error = f"Unknown severity {severity!r}: choose critical, warning or info."
+    if len(words) > MAX_WORDS_LENGTH:
+        error = f"Words: at most {MAX_WORDS_LENGTH} characters."
     if error is None and any(form.values()):
         criteria = {
             "host": host or None, "check": check or None, "severity": severity or None,
@@ -624,7 +629,7 @@ def host_retention_page(
         set_retention(session, actor_of(viewer), host=host, **_named(_retention_form(mode, days)))
     except ValueError as exc:
         return error_page(request, 422, "Not saved", str(exc))
-    return RedirectResponse(f"/hosts/{host.name}", status_code=303)
+    return RedirectResponse(_host_url(session, host.name), status_code=303)
 
 
 def _named(value: tuple[int | None, bool]) -> dict[str, Any]:

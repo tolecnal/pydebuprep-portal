@@ -6,7 +6,7 @@
 {% if new_token %}
 <div class="notice">
   <p>The token <strong>{{ new_name }}</strong> — copy it now, it won't be shown again:</p>
-  <p><code class="secret">{{ new_token }}</code></p>
+  <p class="copy-box"><code class="secret">{{ new_token }}</code><button type="button" class="small copy-btn" data-copy="{{ new_token }}">Copy</button></p>
 </div>
 {% endif %}
 {% if error %}<p class="notice">{{ error }}</p>{% endif %}

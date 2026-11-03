@@ -67,3 +67,7 @@ skip_covered = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore::Warning:fastapi.testclient",
+    "ignore:The httpx module is deprecated:Warning",
+]

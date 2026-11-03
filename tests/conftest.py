@@ -103,12 +103,12 @@ def db_env(db: Session, db_url: str, monkeypatch: pytest.MonkeyPatch) -> dict[st
 
 
 @pytest.fixture
-def make_client(db: Session, db_url: str) -> Iterator[Callable[..., TestClient]]:
+def make_client(db: Session, db_url: str, engine: Engine) -> Iterator[Callable[..., TestClient]]:
     """A test client of a portal on the test database, with extra PORTAL_* settings."""
     clients: list[TestClient] = []
 
     def make(**env: str) -> TestClient:
-        app = create_app(test_settings(PORTAL_DATABASE_URL=db_url, **env))
+        app = create_app(test_settings(PORTAL_DATABASE_URL=db_url, **env), engine=engine)
         c = TestClient(app, base_url="https://testserver")
         clients.append(c.__enter__())
         return c

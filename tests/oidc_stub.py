@@ -13,15 +13,20 @@ from urllib.parse import parse_qs, urlsplit
 from joserfc import jwt
 from joserfc.jwk import RSAKey
 
+_KEY = RSAKey.generate_key(2048, parameters={"kid": "k1", "use": "sig"})
+_OTHER_KEY = RSAKey.generate_key(2048, parameters={"kid": "k1"})  # forged, same kid
+_NEW_KEY = RSAKey.generate_key(2048, parameters={"kid": "k2", "use": "sig"})
+_STRANGER_KEY = RSAKey.generate_key(2048, parameters={"kid": "k9"})
+
 
 class OIDCStub:
     """Discovery, JWKS and a token endpoint; codes are made by `code_for`."""
 
     def __init__(self) -> None:
-        self.key = RSAKey.generate_key(2048, parameters={"kid": "k1", "use": "sig"})
-        self.other_key = RSAKey.generate_key(2048, parameters={"kid": "k1"})  # forged, same kid
-        self.new_key = RSAKey.generate_key(2048, parameters={"kid": "k2", "use": "sig"})
-        self.stranger_key = RSAKey.generate_key(2048, parameters={"kid": "k9"})
+        self.key = _KEY
+        self.other_key = _OTHER_KEY
+        self.new_key = _NEW_KEY
+        self.stranger_key = _STRANGER_KEY
         self.end_session = True
         self.jwks_fetches = 0
         self.codes: dict[str, dict[str, Any]] = {}

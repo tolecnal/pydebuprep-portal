@@ -2,6 +2,16 @@
 {% block title %}Hosts — pydebuprep portal{% endblock %}
 {% block main %}
 <h1>Hosts</h1>
+{% if rows %}
+<div class="stats" aria-label="Fleet summary">
+  <div class="stat"><div class="label">Hosts</div><div class="value">{{ rows | length }}</div></div>
+  <div class="stat critical"><div class="label">Critical</div><div class="value">{{ rows | selectattr("worst", "equalto", "critical") | list | length }}</div></div>
+  <div class="stat warning"><div class="label">Warning</div><div class="value">{{ rows | selectattr("worst", "equalto", "warning") | list | length }}</div></div>
+  <div class="stat info"><div class="label">Info</div><div class="value">{{ rows | selectattr("worst", "equalto", "info") | list | length }}</div></div>
+  <div class="stat ok"><div class="label">OK</div><div class="value">{{ rows | selectattr("worst", "equalto", "ok") | list | length }}</div></div>
+  <div class="stat changes"><div class="label">Worse than before</div><div class="value">{{ rows | selectattr("worse") | list | length }}</div></div>
+</div>
+{% endif %}
 <form class="filters" method="get" action="/hosts">
   <label>Name <input type="search" name="name" value="{{ name_filter }}"></label>
   <label>Release

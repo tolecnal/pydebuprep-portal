@@ -86,7 +86,18 @@ def test_pages_redirect_to_login(oidc_client: TestClient) -> None:
     assert resp.headers["location"] == "/login?next=%2F"
 
 
-@pytest.mark.parametrize("target", ["//evil.example", "https://evil.example/", "evil", "/\\evil"])
+@pytest.mark.parametrize(
+    "target",
+    [
+        "//evil.example",
+        "https://evil.example/",
+        "evil",
+        "/\\evil",
+        "/\t/evil.example",
+        "/\n/evil.example",
+        "/\r/evil.example",
+    ],
+)
 def test_open_redirect_in_next_is_ignored(
     oidc_client: TestClient, stub: OIDCStub, target: str
 ) -> None:
@@ -237,8 +248,21 @@ def test_an_id_token_is_not_an_api_token(oidc_client: TestClient, stub: OIDCStub
 
 def test_metadata_from_an_internal_url(make_client, stub: OIDCStub) -> None:  # type: ignore[no-untyped-def]
     # The provider's public issuer isn't reachable from here; its metadata URL is.
+    issuer = "https://login.example.invalid/realms/test"
     client = make_client(
-        PORTAL_OIDC_ISSUER="https://login.example.invalid/realms/test",
+        PORTAL_OIDC_ISSUER=issuer,
         PORTAL_OIDC_METADATA_URL=f"{stub.issuer}/.well-known/openid-configuration",
     )
     assert client.get("/login", follow_redirects=False).status_code == 302
+    assert login(client, stub).status_code == 400
+    assert login(client, stub, iss=issuer).status_code == 303
+
+
+def test_identity_provider_requests_time_out() -> None:
+    # Metadata, token and JWKS requests all use these client options (authlib).
+    from conftest import test_settings
+    from pydebuprep_portal.auth import OIDC_TIMEOUT, make_oauth
+
+    client = make_oauth(test_settings()).oidc  # type: ignore[attr-defined]
+    assert client.client_kwargs["timeout"] == OIDC_TIMEOUT
+    assert 0 < OIDC_TIMEOUT <= 30

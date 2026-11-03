@@ -42,6 +42,11 @@ class SignInRequired(Exception):
         self.next_path = next_path
 
 
+# Seconds for each request to the identity provider (metadata, tokens, JWKS), so a
+# provider that stops answering can't hold sign-ins and API calls open.
+OIDC_TIMEOUT = 10.0
+
+
 def make_oauth(settings: Settings) -> OAuth:
     oauth = OAuth()
     oauth.register(
@@ -49,7 +54,7 @@ def make_oauth(settings: Settings) -> OAuth:
         client_id=settings.oidc_client_id,
         client_secret=settings.oidc_client_secret,
         server_metadata_url=settings.oidc_metadata_url,
-        client_kwargs={"scope": "openid profile email"},
+        client_kwargs={"scope": "openid profile email", "timeout": OIDC_TIMEOUT},
     )
     return oauth
 
@@ -68,7 +73,12 @@ def safe_next(value: object) -> str:
     """A local path to return to after signing in; anything else becomes /."""
     if not isinstance(value, str):
         return "/"
-    local = value.startswith("/") and not value.startswith("//") and "\\" not in value
+    local = (
+        value.startswith("/")
+        and not value.startswith("//")
+        and "\\" not in value
+        and value.isprintable()
+    )
     return value if local else "/"
 
 
@@ -107,15 +117,18 @@ async def login(request: Request, next: str | None = None) -> Response:
 
 @router.get("/auth/callback")
 async def callback(request: Request) -> Response:
+    settings = _settings(request)
     try:
-        token = await _client(request).authorize_access_token(request)  # type: ignore[no-untyped-call]
+        token = await _client(request).authorize_access_token(  # type: ignore[no-untyped-call]
+            request, claims_options={"iss": {"values": [settings.oidc_issuer]}}
+        )
         claims = dict(token["userinfo"])
     except (OAuthError, JoseError, httpx.HTTPError, KeyError, TypeError, ValueError):
         return error_page(
             request, 400, "Sign-in failed", "The sign-in could not be completed. Try again."
         )
     next_path = safe_next(request.session.get("next"))
-    viewer = _viewer(claims, _settings(request))
+    viewer = _viewer(claims, settings)
     user = {
         "sub": viewer.subject,
         "name": viewer.name,

@@ -18,7 +18,7 @@
   {% for team in teams %}
   <tr>
     <td><a href="/teams/{{ team.name }}">{{ team.name }}</a></td>
-    <td>{{ "public" if team.public else "private" }}</td>
+    <td><span class="flag {{ 'ok' if team.public else 'muted-flag' }}">{{ "public" if team.public else "private" }}</span></td>
     <td class="num">{{ team.hosts }}</td><td class="num">{{ team.reports }}</td>
     <td>{{ team.retention }}</td>
   </tr>

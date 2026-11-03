@@ -44,3 +44,9 @@ def test_member_sidebar_leaves_out_admin_pages(signed_in: Callable[..., TestClie
 def test_signed_out_pages_have_no_sidebar(client: TestClient) -> None:
     page = client.get("/hosts").text
     assert 'class="sidebar"' not in page
+
+
+def test_theme_is_applied_before_the_page_renders(admin: TestClient) -> None:
+    # Loaded without defer, in <head>: a saved theme is set before the body is drawn.
+    head = admin.get("/").text.split("</head>")[0]
+    assert '<script src="/static/portal.js"></script>' in head

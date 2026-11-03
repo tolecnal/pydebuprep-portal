@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import Engine
 from starlette.middleware.sessions import SessionMiddleware
 
 from pydebuprep_portal import __version__, api, auth, pages
@@ -24,10 +25,11 @@ STATIC = Path(__file__).parent / "static"
 SESSION_SECONDS = 8 * 3600
 
 
-def create_app(settings: Settings) -> FastAPI:
-    engine = make_engine(settings.database_url)
+def create_app(settings: Settings, engine: Engine | None = None) -> FastAPI:
+    own_engine = engine is None
+    db_engine = engine if engine is not None else make_engine(settings.database_url)
 
-    maker = make_sessionmaker(engine)
+    maker = make_sessionmaker(db_engine)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -36,7 +38,8 @@ def create_app(settings: Settings) -> FastAPI:
         expiry.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await expiry
-        engine.dispose()
+        if own_engine:
+            db_engine.dispose()
 
     app = FastAPI(
         title="pydebuprep portal",
@@ -61,7 +64,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.include_router(api.router)
     app.include_router(auth.router)
     app.include_router(pages.router)
-    app.add_middleware(SecurityHeaders)
+    app.add_middleware(SecurityHeaders, hsts=settings.base_url.startswith("https://"))
 
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> dict[str, str]:

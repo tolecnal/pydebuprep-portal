@@ -84,7 +84,8 @@ def parse(body: bytes) -> ReportData:
         raise IngestError(422, "expected a JSON report object")
     try:
         report = load_report(text)
-        problem = schema_problem(json.loads(text))
+        raw = json.loads(text)
+        problem = schema_problem(raw)
     except ReportFileError as exc:
         raise IngestError(422, f"not a pydebuprep report: {exc}") from None
     except RecursionError:
@@ -94,7 +95,7 @@ def parse(body: bytes) -> ReportData:
     hostname = report.host.hostname
     if not valid_host_name(hostname):
         raise IngestError(422, f"host.hostname is not a host name: {hostname!r}")
-    if _has_nul(report.to_dict()):
+    if _has_nul(raw):
         raise IngestError(422, "the report contains a NUL character, which can't be stored")
     return report
 
@@ -114,12 +115,14 @@ def schema_problem(data: object) -> str | None:
 
 
 def valid_host_name(name: str) -> bool:
-    """A host name as reports carry it: printable, no whitespace, at most 253 characters."""
+    """A host name as reports carry it: printable, no whitespace or slashes, at most 253
+    characters."""
     return (
         bool(name)
         and len(name) <= MAX_HOSTNAME
+        and name not in {".", ".."}
         and name.isprintable()
-        and not any(c.isspace() for c in name)
+        and not any(c.isspace() or c in "/\\" for c in name)
     )
 
 

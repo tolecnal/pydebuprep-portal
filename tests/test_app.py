@@ -38,3 +38,14 @@ def test_a_route_may_set_its_own_csp() -> None:
         resp = c.get("/own")
     assert resp.headers["Content-Security-Policy"] == "default-src 'none'"
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_https_portals_send_hsts(client: TestClient) -> None:
+    # PORTAL_BASE_URL is https: browsers should never try plain HTTP again.
+    assert client.get("/healthz").headers["Strict-Transport-Security"] == "max-age=31536000"
+
+
+def test_plain_http_portals_send_no_hsts() -> None:
+    settings = test_settings(PORTAL_BASE_URL="http://localhost:8400", PORTAL_ALLOW_HTTP="1")
+    with TestClient(create_app(settings)) as c:
+        assert "Strict-Transport-Security" not in c.get("/healthz").headers
