@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-11-03)
 
+- Built on pydebuprep 0.10.0. Its reports are the same format as 0.9.0's, so hosts
+  may upgrade before or after the portal. Its new `pydebuprep-cleanup` command is
+  configured only on each host (`cleanup:` can't be set in a portal's config).
 - **UI and ergonomics**:
   - A light/dark theme toggle in the sidebar header (`localStorage` + `data-theme`) and
     one-click `Copy` buttons on newly created tokens, config CLI commands, rendered YAML

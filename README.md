@@ -49,7 +49,7 @@ builds the image from this checkout instead. Every released image carries a sign
 build-provenance attestation:
 
 ```sh
-gh attestation verify oci://ghcr.io/tolecnal/pydebuprep-portal:0.5.0 -R tolecnal/pydebuprep-portal
+gh attestation verify oci://ghcr.io/tolecnal/pydebuprep-portal:0.6.0 -R tolecnal/pydebuprep-portal
 ```
 
 Point the reverse proxy at it, and set
