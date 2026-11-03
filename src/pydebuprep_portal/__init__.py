@@ -1,3 +1,3 @@
 """A portal that keeps pydebuprep reports in one place."""
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
