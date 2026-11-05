@@ -48,10 +48,38 @@
   <dt>pydebuprep</dt><dd>{{ report.tool_version }}</dd>
   <dt>Sent with</dt><dd>{{ report.token.name }}</dd>
 </dl>
+<section id="todo">
+<h2>TODO</h2>
+{% if todo_list %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Severity</th><th>Check</th><th>Finding</th><th>Fix</th></tr></thead>
+  <tbody>
+  {% for item in todo_list %}
+  <tr>
+    <td>{% if item.severity %}<span class="sev sev-{{ item.severity }}">{{ item.severity }}</span>{% endif %}</td>
+    <td>{{ item.check or "" }}</td>
+    <td>{{ item.title }}</td>
+    <td>{% if item.steps %}<ol class="steps">{% for step in item.steps %}<li>{{ step }}</li>{% endfor %}</ol>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p>Nothing to do.</p>
+{% endif %}
+</section>
+{% set todo_query = "?todo=1" if with_todo else "" %}
 <div class="actions">
-<p class="downloads">Download:
-{% for fmt in formats %}<a href="/reports/{{ report.id }}/download/{{ fmt }}">{{ fmt }}</a>{% endfor %}
-</p>
+<div class="downloads">
+{% for group in download_groups %}
+<div class="download-group"><span class="group-name">{{ group.name }}</span>
+{% for link in group.links %}<a href="/reports/{{ report.id }}/download/{{ link.fmt }}{{ todo_query }}">{{ link.label }}</a>{% if link.copy %}<button type="button" class="small copy-btn" data-copy-url="/reports/{{ report.id }}/download/{{ link.fmt }}{{ todo_query }}" aria-label="Copy for {{ link.copy }}">Copy</button>{% endif %}{% endfor %}
+</div>
+{% endfor %}
+<p class="todo-choice">{% if with_todo %}Downloads include the TODO list. <a href="/reports/{{ report.id }}">Leave it out</a>{% else %}<a href="/reports/{{ report.id }}?todo=1">Include the TODO list in downloads</a>{% endif %}</p>
+</div>
 {% if may_delete %}
 <form method="post" action="/reports/{{ report.id }}/delete" class="inline">
   <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">

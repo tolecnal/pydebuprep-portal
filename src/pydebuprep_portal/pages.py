@@ -73,11 +73,12 @@ from pydebuprep_portal.queries import (
     visible_team_names,
 )
 from pydebuprep_portal.rendering import (
-    DOWNLOAD_FORMATS,
+    DOWNLOAD_GROUPS,
     MEDIA_TYPES,
     REPORT_CSP,
     download_name,
     render_stored,
+    todo_of,
 )
 from pydebuprep_portal.retention import describe, effective_retention
 from pydebuprep_portal.security import DOCS_CSP, require_csrf
@@ -143,7 +144,7 @@ def home(
 
 @router.get("/reports/{report_id}", response_class=HTMLResponse)
 def report_page(
-    request: Request, report_id: RowId, viewer: ViewerDep, session: SessionDep
+    request: Request, report_id: RowId, viewer: ViewerDep, session: SessionDep, todo: bool = False
 ) -> HTMLResponse:
     report = get_report(session, viewer, report_id)
     if report is None:
@@ -155,7 +156,9 @@ def report_page(
         "report.html",
         viewer,
         report=report,
-        formats=DOWNLOAD_FORMATS,
+        download_groups=DOWNLOAD_GROUPS,
+        todo_list=todo_of(report.body),
+        with_todo=todo,
         may_delete=may_delete,
         compared=comparison(report), changes=changes,
     )  # fmt: skip
@@ -190,14 +193,19 @@ def report_html(
 
 @router.get("/reports/{report_id}/download/{fmt}")
 def report_download(
-    request: Request, report_id: RowId, fmt: str, viewer: ViewerDep, session: SessionDep
+    request: Request,
+    report_id: RowId,
+    fmt: str,
+    viewer: ViewerDep,
+    session: SessionDep,
+    todo: bool = False,
 ) -> Response:
     report = get_report(session, viewer, report_id)
     if report is None or fmt not in FORMATS:
         return _not_found(request)
     name = download_name(report.host.name, report.generated_at, fmt)
     return Response(
-        render_stored(report.body, fmt),
+        render_stored(report.body, fmt, todo=todo),
         media_type=MEDIA_TYPES[fmt],
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )

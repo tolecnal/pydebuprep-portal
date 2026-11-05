@@ -11,6 +11,40 @@
     root.dataset.theme = saved;
   }
 
+  const flash = (button, message) => {
+    const original = button.textContent;
+    button.dataset.copied = "true";
+    button.textContent = message;
+    setTimeout(() => {
+      delete button.dataset.copied;
+      button.textContent = original;
+    }, 1600);
+  };
+
+  // Copy what a URL gives. ClipboardItem takes the text as a promise, so browsers that only
+  // allow copying during the click (Safari) accept it while the text is still loading.
+  const copyFromUrl = (button) => {
+    if (!navigator.clipboard) {
+      flash(button, "Needs HTTPS");
+      return;
+    }
+    const text = fetch(button.dataset.copyUrl, { credentials: "same-origin" }).then((reply) => {
+      if (!reply.ok) throw new Error(String(reply.status));
+      return reply.text();
+    });
+    const written = window.ClipboardItem
+      ? navigator.clipboard.write([
+          new ClipboardItem({
+            "text/plain": text.then((body) => new Blob([body], { type: "text/plain" })),
+          }),
+        ])
+      : text.then((body) => navigator.clipboard.writeText(body));
+    written.then(
+      () => flash(button, "Copied!"),
+      () => flash(button, "Copy failed"),
+    );
+  };
+
   document.addEventListener("click", (event) => {
     const toggle = event.target.closest("#theme-toggle");
     if (toggle) {
@@ -25,19 +59,17 @@
       return;
     }
 
+    const copyUrlBtn = event.target.closest("[data-copy-url]");
+    if (copyUrlBtn) {
+      copyFromUrl(copyUrlBtn);
+      return;
+    }
+
     const copyBtn = event.target.closest("[data-copy]");
     if (copyBtn && navigator.clipboard) {
       const target = copyBtn.dataset.copy || copyBtn.closest(".copy-box")?.querySelector("code, pre")?.textContent || "";
       if (target) {
-        navigator.clipboard.writeText(target.trim()).then(() => {
-          const original = copyBtn.textContent;
-          copyBtn.dataset.copied = "true";
-          copyBtn.textContent = "Copied!";
-          setTimeout(() => {
-            delete copyBtn.dataset.copied;
-            copyBtn.textContent = original;
-          }, 1600);
-        });
+        navigator.clipboard.writeText(target.trim()).then(() => flash(copyBtn, "Copied!"));
       }
     }
   });

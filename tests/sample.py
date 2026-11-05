@@ -33,15 +33,22 @@ def sample_report(
     machine_id: str | None = None,
     baseline: BaselineInfo | None = None,
     changes: tuple[tuple[str, str, str], ...] = (),
+    remediation: tuple[str, ...] = (),
 ) -> Report:
     """FINDINGS are (check, severity, title), optionally followed by a detail and
     evidence lines. CHANGES are (check, severity, title) differences from BASELINE, the
-    snapshot the report was compared with."""
+    snapshot the report was compared with. Every finding gets the REMEDIATION steps."""
     by_check: dict[str, list[Finding]] = {}
     for check, severity, title, *more in findings:
         detail = more[0] if more else ""
         by_check.setdefault(check, []).append(
-            Finding(Severity(severity), title, detail=detail, evidence=list(more[1:]))
+            Finding(
+                Severity(severity),
+                title,
+                detail=detail,
+                evidence=list(more[1:]),
+                remediation=list(remediation),
+            )
         )
     diffs: dict[str, list[Finding]] = {}
     for check, severity, title in changes:

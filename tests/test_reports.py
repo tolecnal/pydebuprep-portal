@@ -92,8 +92,9 @@ def test_report_page(admin: TestClient, add_report: AddReport) -> None:
     assert f'<iframe sandbox="" src="/reports/{report.id}/html"' in page
     for fmt in DOWNLOAD_FORMATS:
         assert f'href="/reports/{report.id}/download/{fmt}"' in page
-    # The same file as jira-legacy, so it isn't linked as well.
+    # The same files as the -legacy formats, so they aren't linked as well.
     assert f'href="/reports/{report.id}/download/jira"' not in page
+    assert f'href="/reports/{report.id}/download/confluence"' not in page
 
 
 @pytest.mark.parametrize("fmt", FORMATS)
@@ -253,3 +254,103 @@ def test_list_queries_defer_report_body(add_report: AddReport, db) -> None:  # t
     db.expire_all()
     single = get_report(db, viewer, stored.id)
     assert single is not None and "body" in inspect(single).dict
+
+
+def _todo_section(page: str) -> str:
+    return page[
+        page.index('<section id="todo"') : page.index(
+            "</section>", page.index('<section id="todo"')
+        )
+    ]
+
+
+def test_report_page_shows_the_todo_list(admin: TestClient, add_report: AddReport) -> None:
+    report = add_report(remediation=("Fix <it>", "Check again"))
+    section = _todo_section(admin.get(f"/reports/{report.id}").text)
+    assert '<span class="sev sev-critical">critical</span>' in section
+    assert '<span class="sev sev-warning">warning</span>' in section
+    assert "apt-sources" in section
+    assert "Repository still targets bookworm" in section
+    assert "<li>Fix &lt;it&gt;</li>" in section
+    assert "<li>Check again</li>" in section
+    assert "Run pydebuprep again to confirm everything is fixed" in section
+
+
+def test_todo_list_is_read_only(admin: TestClient, add_report: AddReport) -> None:
+    section = _todo_section(admin.get(f"/reports/{add_report().id}").text)
+    for control in ("<input", "<form", "<button", "<select"):
+        assert control not in section
+
+
+def test_todo_list_with_nothing_to_do(admin: TestClient, add_report: AddReport) -> None:
+    section = _todo_section(admin.get(f"/reports/{add_report(findings=()).id}").text)
+    assert "Nothing to do." in section
+    assert "<table" not in section
+
+
+def test_todo_text_is_escaped(admin: TestClient, add_report: AddReport) -> None:
+    report = add_report(findings=(("disk-space", "warning", "<script>alert(1)</script>"),))
+    section = _todo_section(admin.get(f"/reports/{report.id}").text)
+    assert "<script" not in section
+    assert "&lt;script&gt;" in section
+
+
+@pytest.mark.parametrize(
+    "fmt", ["jira-cloud", "confluence-cloud", "jira-legacy", "confluence-legacy"]
+)
+def test_download_includes_the_todo_only_when_asked(
+    admin: TestClient, add_report: AddReport, fmt: str
+) -> None:
+    report = add_report()
+    plain = admin.get(f"/reports/{report.id}/download/{fmt}").text
+    with_todo = admin.get(f"/reports/{report.id}/download/{fmt}", params={"todo": 1}).text
+    assert "TODO" not in plain
+    assert "TODO" in with_todo
+
+
+def test_json_download_with_todo_carries_the_array(
+    admin: TestClient, add_report: AddReport
+) -> None:
+    report = add_report()
+    assert '"todo"' in admin.get(f"/reports/{report.id}/download/json", params={"todo": 1}).text
+
+
+def test_api_renders_with_the_todo_when_asked(
+    admin: TestClient, add_report: AddReport, bearer: Bearer
+) -> None:
+    report = add_report()
+    url = f"/api/v1/reports/{report.id}/jira-cloud"
+    headers = bearer("pydebuprep-auditors")
+    plain = admin.get(url, headers=headers)
+    assert plain.status_code == 200
+    assert "TODO" not in plain.text
+    assert "## TODO" in admin.get(url, params={"todo": "true"}, headers=headers).text
+
+
+def test_page_links_follow_the_todo_choice(admin: TestClient, add_report: AddReport) -> None:
+    report = add_report()
+    off = admin.get(f"/reports/{report.id}").text
+    assert f'href="/reports/{report.id}/download/jira-cloud"' in off
+    assert f'href="/reports/{report.id}?todo=1"' in off
+    on = admin.get(f"/reports/{report.id}", params={"todo": 1}).text
+    assert f'href="/reports/{report.id}/download/jira-cloud?todo=1"' in on
+    assert f'data-copy-url="/reports/{report.id}/download/jira-cloud?todo=1"' in on
+    assert f'href="/reports/{report.id}"' in on  # turning it off again
+
+
+@pytest.mark.parametrize(
+    "fmt", ["jira-cloud", "jira-legacy", "confluence-cloud", "confluence-legacy"]
+)
+def test_pasted_formats_have_copy_buttons(
+    admin: TestClient, add_report: AddReport, fmt: str
+) -> None:
+    report = add_report()
+    page = admin.get(f"/reports/{report.id}").text
+    assert f'data-copy-url="/reports/{report.id}/download/{fmt}"' in page
+
+
+def test_other_formats_have_no_copy_button(admin: TestClient, add_report: AddReport) -> None:
+    report = add_report()
+    page = admin.get(f"/reports/{report.id}").text
+    for fmt in ("text", "json", "yaml", "html", "markdown"):
+        assert f'data-copy-url="/reports/{report.id}/download/{fmt}"' not in page

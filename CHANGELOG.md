@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Built on pydebuprep 0.13.0. Its reports are the same format as 0.12.0's, so hosts may
+  upgrade before or after the portal. A host needs 0.13.0 before a config it fetches can
+  set `format: confluence-legacy` or `confluence-cloud`; older versions reject those.
+  `format: confluence` keeps working everywhere.
+- Reports can be downloaded as `confluence-cloud`, Markdown for pasting into Confluence
+  Cloud, or `confluence-legacy`, the wiki markup for on-prem Confluence.
+- The report page shows a read-only TODO list, built from the report's findings, so
+  every report has one, old ones included. Downloads can include it, and the API takes
+  `?todo=true`.
+- The report page's downloads are grouped into Jira, Confluence and Other, and the Jira and
+  Confluence formats have a Copy button, so they can be pasted without saving a file.
+  Copying needs HTTPS or localhost.
+- The config generator no longer offers `jira` and `confluence`, the other names for the
+  `-legacy` formats, unless a config already uses one.
+- Markdown and HTML report downloads show the labels in the report header in bold.
+
 ## 0.8.0 (2026-11-05)
 
 - Built on pydebuprep 0.12.0. Its reports are the same format as 0.11.0's, so hosts

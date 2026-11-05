@@ -246,3 +246,26 @@ def test_offers_pydebuprep_0_9_0s_checks_and_options() -> None:
         for option in ("tls_probe", "config_test", "cert_warning_days", "cert_critical_days"):
             assert f"checks.{check}.{option}" in forms[check]
     assert "checks.certbot.cert_warning_days" in forms["certbot"]
+
+
+def test_format_aliases_are_valid_but_not_offered() -> None:
+    fields = {f.key: f for f in REPORT_FIELDS}
+    field = fields["report.format"]
+    assert {"jira-cloud", "jira-legacy", "confluence-cloud", "confluence-legacy"} <= set(
+        field.choices
+    )
+    assert not {"jira", "confluence"} & set(field.choices)
+    assert field.also_valid == ("jira", "confluence")
+
+
+def test_a_config_using_an_alias_keeps_it() -> None:
+    field = {f.key: f for f in REPORT_FIELDS}["report.format"]
+    assert "jira" in field.options_for("jira")
+    assert "confluence" not in field.options_for("jira")
+    assert "jira" not in field.options_for("text")
+    assert (
+        values_from_form({"_fields": ["report.format"], "report.format": "jira"})["report"][
+            "format"
+        ]
+        == "jira"
+    )
