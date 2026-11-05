@@ -11,7 +11,7 @@ from pydebuprep.render import FORMATS, render
 from pydebuprep.reportfile import load_report
 
 from pydebuprep_portal.models import Report
-from pydebuprep_portal.rendering import REPORT_CSP, download_name
+from pydebuprep_portal.rendering import DOWNLOAD_FORMATS, REPORT_CSP, download_name
 from sample import sample_json
 
 AddReport = Callable[..., Report]
@@ -90,8 +90,10 @@ def test_report_page(admin: TestClient, add_report: AddReport) -> None:
     assert "web1" in page and "debian 13 (trixie)" in page and "6.12.0-1-amd64" in page
     assert "fixture" in page  # the token that sent it
     assert f'<iframe sandbox="" src="/reports/{report.id}/html"' in page
-    for fmt in FORMATS:
+    for fmt in DOWNLOAD_FORMATS:
         assert f'href="/reports/{report.id}/download/{fmt}"' in page
+    # The same file as jira-legacy, so it isn't linked as well.
+    assert f'href="/reports/{report.id}/download/jira"' not in page
 
 
 @pytest.mark.parametrize("fmt", FORMATS)

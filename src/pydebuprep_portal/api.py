@@ -242,7 +242,8 @@ def report(report_id: RowId, viewer: ViewerDep, session: SessionDep) -> ReportDe
     responses=NOT_FOUND,
 )
 def report_rendered(report_id: RowId, fmt: str, viewer: ViewerDep, session: SessionDep) -> Response:
-    """`fmt` is one of text, json, yaml, html, markdown, jira, confluence."""
+    """`fmt` is one of text, json, yaml, html, markdown, jira, jira-legacy, jira-cloud,
+    confluence."""
     found = get_report(session, viewer, report_id)
     if found is None or fmt not in FORMATS:
         raise HTTPException(404, "no such report or format")

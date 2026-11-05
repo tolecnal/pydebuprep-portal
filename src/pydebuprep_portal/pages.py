@@ -73,6 +73,7 @@ from pydebuprep_portal.queries import (
     visible_team_names,
 )
 from pydebuprep_portal.rendering import (
+    DOWNLOAD_FORMATS,
     MEDIA_TYPES,
     REPORT_CSP,
     download_name,
@@ -150,7 +151,12 @@ def report_page(
     may_delete = may_delete_reports(viewer, report.team.name if report.team else None)
     changes = [f for f in report.findings if f.since_baseline]
     return page(
-        request, "report.html", viewer, report=report, formats=FORMATS, may_delete=may_delete,
+        request,
+        "report.html",
+        viewer,
+        report=report,
+        formats=DOWNLOAD_FORMATS,
+        may_delete=may_delete,
         compared=comparison(report), changes=changes,
     )  # fmt: skip
 
