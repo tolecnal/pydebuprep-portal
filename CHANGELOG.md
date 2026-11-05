@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Releases now run the lint and test jobs before building the image. CI no longer runs
+  on merges to `main`; it runs on pull requests, weekly and by hand. Security and CodeQL
+  skip merges that can't change what they check, and pip downloads are cached.
+
 ## 0.6.0 (2026-11-03)
 
 - Built on pydebuprep 0.10.0. Its reports are the same format as 0.9.0's, so hosts
