@@ -10,7 +10,12 @@ from pathlib import Path
 import pytest
 from pydebuprep.render import FORMATS
 
-from pydebuprep_portal.rendering import FILE_EXTENSIONS, MEDIA_TYPES, download_name
+from pydebuprep_portal.rendering import (
+    DOWNLOAD_FORMATS,
+    FILE_EXTENSIONS,
+    MEDIA_TYPES,
+    download_name,
+)
 
 PACKAGE = Path(__file__).resolve().parent.parent / "src" / "pydebuprep_portal"
 WHEN = datetime(2026, 10, 31, 9, 0, 5, tzinfo=UTC)
@@ -29,10 +34,23 @@ def test_file_extensions_cover_every_format() -> None:
         ("a..b", "json", "a.b-20261031T090005Z.json"),
         ("../..", "html", "report-20261031T090005Z.html"),
         ('x"; y', "jira", "xy-20261031T090005Z.jira.txt"),
+        ("web1", "jira-legacy", "web1-20261031T090005Z.jira.txt"),
+        ("web1", "jira-cloud", "web1-20261031T090005Z.jira-cloud.md"),
     ],
 )
 def test_download_name_is_safe(host: str, fmt: str, name: str) -> None:
     assert download_name(host, WHEN, fmt) == name
+
+
+def test_cloud_format_is_served_as_markdown() -> None:
+    assert MEDIA_TYPES["jira-cloud"] == "text/markdown; charset=utf-8"
+    assert MEDIA_TYPES["jira-legacy"] == MEDIA_TYPES["jira"] == "text/plain; charset=utf-8"
+
+
+def test_download_links_leave_out_the_jira_alias() -> None:
+    # "jira" is the same file as "jira-legacy"; its address keeps working.
+    assert set(DOWNLOAD_FORMATS) == set(FORMATS) - {"jira"}
+    assert {"jira-legacy", "jira-cloud"} <= set(DOWNLOAD_FORMATS)
 
 
 def test_download_name_in_utc() -> None:

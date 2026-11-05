@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0 (2026-11-05)
+
+- Built on pydebuprep 0.12.0. Its reports are the same format as 0.11.0's, so hosts
+  may upgrade before or after the portal. **Exception:** a host needs pydebuprep 0.12.0
+  before a config it fetches can set `format: jira-legacy` or `jira-cloud`; older
+  versions reject those. `format: jira` keeps working everywhere.
+- Reports can be downloaded as `jira-cloud`, Markdown for pasting into Jira Cloud (whose
+  editor shows wiki markup as plain text), or `jira-legacy`, the wiki markup for on-prem
+  Jira, pasted with the comment in text mode. The report page links those two; the
+  `jira` address and API format still work and give the `jira-legacy` file.
+- Jira and Confluence downloads show the labels in the report header in bold.
+
 ## 0.7.0 (2026-11-05)
 
 - Built on pydebuprep 0.11.0. Its reports are the same format as 0.10.0's, so hosts

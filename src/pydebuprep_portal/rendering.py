@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 
-from pydebuprep.render import render
+from pydebuprep.render import FORMATS, render
 from pydebuprep.reportfile import load_report
 
 FILE_EXTENSIONS = {
@@ -15,6 +15,8 @@ FILE_EXTENSIONS = {
     "html": "html",
     "markdown": "md",
     "jira": "jira.txt",
+    "jira-legacy": "jira.txt",
+    "jira-cloud": "jira-cloud.md",
     "confluence": "confluence.txt",
 }
 MEDIA_TYPES = {
@@ -24,8 +26,13 @@ MEDIA_TYPES = {
     "html": "text/html; charset=utf-8",
     "markdown": "text/markdown; charset=utf-8",
     "jira": "text/plain; charset=utf-8",
+    "jira-legacy": "text/plain; charset=utf-8",
+    "jira-cloud": "text/markdown; charset=utf-8",
     "confluence": "text/plain; charset=utf-8",
 }
+# What the report page links to. "jira" is the same file as "jira-legacy", so it isn't
+# linked as well; its address keeps working.
+DOWNLOAD_FORMATS = tuple(fmt for fmt in FORMATS if fmt != "jira")
 # A report's HTML is shown in a sandboxed frame: no scripts, no requests, its own
 # inline stylesheet only, framed only by the portal itself.
 REPORT_CSP = "sandbox; default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'"
