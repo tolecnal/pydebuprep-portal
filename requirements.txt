@@ -754,8 +754,8 @@ pydantic-core==2.50.2 \
     --hash=sha256:f81df206b937d0dca5efb38c25fc99037d82dbcd3740e34c3f81997d2322ac1c \
     --hash=sha256:fd9aa71a800c87c0f7ab53fa38009169a23a82c685989626ca74a4bd483e1b67
     # via pydantic
-pydebuprep @ https://github.com/tolecnal/pydebuprep/archive/refs/tags/v0.10.0.tar.gz \
-    --hash=sha256:73eaee1b36b156baa19d6b18bc92536a8fb048a51f15276ef55dc88846ed27ae
+pydebuprep @ https://github.com/tolecnal/pydebuprep/archive/refs/tags/v0.11.0.tar.gz \
+    --hash=sha256:e59c0cede9de29205f263121f31cf18c553cf42ffbb6904808db93625d5eb1c3
     # via -r requirements.in
 python-dotenv==1.2.4 \
     --hash=sha256:42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc \

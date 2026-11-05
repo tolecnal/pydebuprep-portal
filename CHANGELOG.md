@@ -1,7 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 (2026-11-05)
 
+- Built on pydebuprep 0.11.0. Its reports are the same format as 0.10.0's, so hosts
+  may upgrade before or after the portal.
+- Jira, Confluence and HTML report downloads change with it: a check's status takes the
+  colour of its worst finding, so a check with only warnings is no longer red in Jira and
+  Confluence, and warnings are orange (yellow in Confluence, whose status macro has no
+  orange). The portal's downloads have no TODO list, so pydebuprep's new TODO tables
+  don't appear in them.
 - Releases now run the lint and test jobs before building the image. CI no longer runs
   on merges to `main`; it runs on pull requests, weekly and by hand. Security and CodeQL
   skip merges that can't change what they check, and pip downloads are cached.
