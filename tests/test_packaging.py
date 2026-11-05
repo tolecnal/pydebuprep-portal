@@ -183,6 +183,31 @@ def test_release_workflow_publishes_to_ghcr() -> None:
     assert "${{" not in "".join(s.get("run", "") for s in job["steps"])  # no template injection
 
 
+def test_release_runs_the_tests_before_publishing() -> None:
+    release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    assert release["jobs"]["tests"]["uses"].endswith("/.github/workflows/ci.yml")
+    assert release["jobs"]["image"]["needs"] == "tests"
+    assert "workflow_call" in ci[True]
+    # The release does the smoke test itself, on the image it publishes.
+    assert ci["jobs"]["image"]["if"] == "github.workflow == 'CI'"
+
+
+def test_called_ci_cannot_cancel_the_release() -> None:
+    # Group names ignore case. Called from Release, github.workflow is "Release", so a group
+    # equal to Release's would cancel the release that is waiting for it.
+    release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    called = ci["concurrency"]["group"].replace("${{ github.workflow }}", "Release")
+    assert called.lower() != release["concurrency"]["group"].lower()
+
+
+def test_ci_runs_weekly_and_not_on_merge() -> None:
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    assert "push" not in ci[True]
+    assert ci[True]["schedule"]
+
+
 def test_compose_pulls_the_released_image() -> None:
     compose = yaml.safe_load((ROOT / "compose.yaml").read_text())
     image = compose["services"]["portal"]["image"]

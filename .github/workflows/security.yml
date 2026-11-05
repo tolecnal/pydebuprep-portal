@@ -3,6 +3,8 @@ name: Security
 on:
   push:
     branches: [main]
+    paths:
+      - ".github/**"
   pull_request:
   schedule:
     - cron: "41 3 * * 1"
@@ -18,6 +20,7 @@ concurrency:
 jobs:
   bandit:
     name: Bandit (Python security lint)
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -26,12 +29,15 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: requirements-dev.txt
       - run: python -m pip install --require-hashes -r requirements-dev.txt
       # Deliberate exceptions are marked inline with "# nosec <id>" and a reason.
       - run: bandit -r src scripts
 
   shellcheck:
     name: ShellCheck
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,6 +49,7 @@ jobs:
 
   pip-audit:
     name: Known vulnerabilities in Python dependencies
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,6 +58,8 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: requirements-audit.txt
       - run: python -m pip install --require-hashes -r requirements-audit.txt
       # Everything the image runs and the tooling (pydebuprep is audited in its own repo).
       - run: make audit
