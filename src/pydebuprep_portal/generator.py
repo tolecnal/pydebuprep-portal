@@ -56,6 +56,10 @@ class Field:
     default: Any
     choices: tuple[str, ...] = ()
     option: Option | None = field(default=None, compare=False)
+    also_valid: tuple[str, ...] = ()  # accepted, but only offered to a config that has it
+
+    def options_for(self, value: Any) -> tuple[str, ...]:
+        return (*self.choices, value) if value in self.also_valid else self.choices
 
 
 @dataclass(frozen=True)
@@ -67,13 +71,31 @@ class CheckForm:
     fields: tuple[Field, ...]
 
 
-def _report_field(key: str, label: str, kind: Kind, choices: tuple[str, ...] = ()) -> Field:
+def _report_field(
+    key: str,
+    label: str,
+    kind: Kind,
+    choices: tuple[str, ...] = (),
+    also_valid: tuple[str, ...] = (),
+) -> Field:
     default = getattr(ReportSettings(), key)
-    return Field(f"report.{key}", label, REPORT_HELP[key], kind, default, choices)
+    return Field(
+        f"report.{key}", label, REPORT_HELP[key], kind, default, choices, also_valid=also_valid
+    )
+
+
+# Other names for jira-legacy and confluence-legacy, which existing configs may use.
+FORMAT_ALIASES = ("jira", "confluence")
 
 
 REPORT_FIELDS = (
-    _report_field("format", "Format", "choice", tuple(FORMATS)),
+    _report_field(
+        "format",
+        "Format",
+        "choice",
+        tuple(fmt for fmt in FORMATS if fmt not in FORMAT_ALIASES),
+        FORMAT_ALIASES,
+    ),
     _report_field("min_severity", "Lowest severity shown", "choice", tuple(SEVERITIES)),
     _report_field("todo", "TODO checklist", "bool"),
     _report_field("color", "Color", "bool"),
@@ -157,7 +179,7 @@ def _from_form(f: Field, raw: str | None) -> Any:
         return raw is not None and raw != ""
     text = raw or ""
     if f.kind == "choice":
-        if text not in f.choices:
+        if text not in f.choices and text not in f.also_valid:
             raise ValueError(f"expected one of {', '.join(f.choices)}")
         return text
     if f.kind == "list":  # one item per line, as typed; blank lines are dropped

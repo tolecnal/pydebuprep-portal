@@ -222,6 +222,11 @@ deleted report, is in the **audit log** with who and when. Admins and auditors r
   which machine.
 - **Search** finds findings by host, check, severity, words in the title, detail or
   evidence, and the dates of their reports; or only changes since a snapshot.
+- **TODO list**: each report's page lists what needs doing, built from its findings. It's
+  read-only: track the work wherever you paste it. Downloads can include it, and the API
+  takes `?todo=true`.
+- **Copy for pasting**: the Jira and Confluence formats have a Copy button on the report
+  page, for Cloud and on-prem (it needs HTTPS or localhost).
 - **CSV**: the reports, hosts and search pages download what they list (up to 10,000
   rows). Cells that a spreadsheet would run as a formula are escaped.
 
