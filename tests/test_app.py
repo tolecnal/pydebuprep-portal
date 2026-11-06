@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from fastapi import Response
 from fastapi.testclient import TestClient
 
 from conftest import test_settings
 from pydebuprep_portal.app import create_app
+from pydebuprep_portal.models import Report
 from pydebuprep_portal.security import PAGE_CSP
 
 
@@ -49,3 +52,17 @@ def test_plain_http_portals_send_no_hsts() -> None:
     settings = test_settings(PORTAL_BASE_URL="http://localhost:8400", PORTAL_ALLOW_HTTP="1")
     with TestClient(create_app(settings)) as c:
         assert "Strict-Transport-Security" not in c.get("/healthz").headers
+
+
+def test_pages_are_not_kept_in_browser_caches(
+    signed_in: Callable[..., TestClient], add_report: Callable[..., Report]
+) -> None:
+    """They hold what hosts report; a shared machine's browser must not keep a copy."""
+    report = add_report()
+    admin = signed_in("pydebuprep-admins")
+    for path in ("/", f"/reports/{report.id}", f"/reports/{report.id}/download/json"):
+        assert admin.get(path).headers["Cache-Control"] == "no-store", path
+
+
+def test_static_files_may_be_cached(client: TestClient) -> None:
+    assert client.get("/static/portal.js").headers.get("Cache-Control") != "no-store"

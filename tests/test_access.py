@@ -11,7 +11,9 @@ from pydebuprep_portal.access import Viewer, roles_from_groups, teams_from_group
     ("groups", "roles"),
     [
         (["pydebuprep-admins"], {"admin"}),
-        (["/org/pydebuprep-auditors"], {"auditor"}),
+        (["/pydebuprep-auditors"], {"auditor"}),
+        (["/org/pydebuprep-auditors"], set()),
+        (["org/pydebuprep-admins"], set()),
         (["pydebuprep-admins", "pydebuprep-auditors"], {"admin", "auditor"}),
         (["pydebuprep-admins-x", "admins", "pydebuprep-team-web"], set()),
         ("pydebuprep-admins", set()),
@@ -40,7 +42,8 @@ def test_viewer_properties() -> None:
     [
         (["pydebuprep-team-web"], {"web"}, set()),
         (["pydebuprep-team-web-lead"], {"web"}, {"web"}),
-        (["/org/pydebuprep-team-DB"], {"db"}, set()),
+        (["/pydebuprep-team-DB"], {"db"}, set()),
+        (["/org/pydebuprep-team-DB"], set(), set()),
         (
             [
                 "pydebuprep-team-",
@@ -87,7 +90,15 @@ def test_valid_team_name(name: str, valid: bool) -> None:
 
 
 def test_role_groups_match_case_insensitively() -> None:
-    assert roles_from_groups(["PyDebUPrep-Admins", "/org/PYDEBUPREP-AUDITORS"], "pydebuprep-") == {
+    assert roles_from_groups(["PyDebUPrep-Admins", "/PYDEBUPREP-AUDITORS"], "pydebuprep-") == {
         "admin",
         "auditor",
     }
+
+
+def test_a_group_under_the_configured_parent_counts() -> None:
+    groups = ["/Org/pydebuprep-admins", "/org/pydebuprep-team-web", "/other/pydebuprep-auditors"]
+    assert roles_from_groups(groups, "pydebuprep-", "/org") == {"admin"}
+    assert teams_from_groups(groups, "pydebuprep-", "/org") == (frozenset({"web"}), frozenset())
+    assert roles_from_groups(["/org/deeper/pydebuprep-admins"], "pydebuprep-", "/org") == set()
+    assert roles_from_groups(["/pydebuprep-admins"], "pydebuprep-", "/org") == {"admin"}

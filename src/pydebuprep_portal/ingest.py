@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import zlib
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from functools import cache
 from typing import Any
@@ -26,6 +27,10 @@ from pydebuprep_portal.models import Finding, Host, Report, Team, Token
 from pydebuprep_portal.settings_store import get_settings
 
 MAX_HOSTNAME = 253
+# Outside these, a time isn't real; at the very edges of what datetime holds, PostgreSQL
+# stores it (in UTC) but it can't be read back, and every list holding the row would fail.
+EARLIEST = datetime(2000, 1, 1, tzinfo=UTC)
+LATEST = datetime(2100, 1, 1, tzinfo=UTC)
 ENCODINGS = ("identity", "gzip")
 
 
@@ -90,13 +95,22 @@ def parse(body: bytes) -> ReportData:
         raise IngestError(422, f"not a pydebuprep report: {exc}") from None
     except RecursionError:
         raise IngestError(422, "the report is nested too deeply") from None
+    except ValueError:  # an integer longer than Python reads
+        raise IngestError(422, "the report holds a number too long to read") from None
     if problem:
         raise IngestError(422, f"does not match the report schema: {problem}")
     hostname = report.host.hostname
     if not valid_host_name(hostname):
         raise IngestError(422, f"host.hostname is not a host name: {hostname!r}")
-    if _has_nul(raw):
-        raise IngestError(422, "the report contains a NUL character, which can't be stored")
+    if not _plausible(_when(report.generated_at)):
+        raise IngestError(
+            422, f"generated_at: {report.generated_at} is not a time between 2000 and 2100"
+        )
+    for text in _strings(raw):
+        if "\x00" in text:
+            raise IngestError(422, "the report contains a NUL character, which can't be stored")
+        if not _valid_utf8(text):
+            raise IngestError(422, "the report contains half a character, which can't be stored")
     return report
 
 
@@ -126,14 +140,30 @@ def valid_host_name(name: str) -> bool:
     )
 
 
-def _has_nul(value: object) -> bool:
+def _strings(value: object) -> Iterator[str]:
+    """Every string in parsed JSON, keys included."""
     if isinstance(value, str):
-        return "\x00" in value
-    if isinstance(value, dict):
-        return any(_has_nul(k) or _has_nul(v) for k, v in value.items())
-    if isinstance(value, list):
-        return any(_has_nul(v) for v in value)
-    return False
+        yield value
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield key
+            yield from _strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _strings(item)
+
+
+def _valid_utf8(text: str) -> bool:
+    """False for a lone surrogate, which JSON's \\ud800 can spell and PostgreSQL can't store."""
+    try:
+        text.encode()
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _plausible(moment: datetime) -> bool:
+    return EARLIEST <= moment < LATEST
 
 
 def _when(value: str) -> datetime:
@@ -248,6 +278,8 @@ def _baseline(data: ReportData) -> dict[str, Any]:
         taken: datetime | None = _when(b.created_at)
     except ValueError:
         taken = None  # the snapshot's own field: shown as unknown rather than refused
+    if taken is not None and not _plausible(taken):
+        taken = None
     return {
         "baseline": True,
         "baseline_at": taken,

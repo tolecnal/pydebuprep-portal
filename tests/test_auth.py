@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select, update
+from sqlalchemy.orm import Session
 
 from conftest import csrf_of, login
 from oidc_stub import OIDCStub
+from pydebuprep_portal.auth import SESSION_SECONDS
+from pydebuprep_portal.models import LoginSession
 
 
 def test_sign_in_round_trip(oidc_client: TestClient, stub: OIDCStub) -> None:
@@ -266,3 +271,74 @@ def test_identity_provider_requests_time_out() -> None:
     client = make_oauth(test_settings()).oidc  # type: ignore[attr-defined]
     assert client.client_kwargs["timeout"] == OIDC_TIMEOUT
     assert 0 < OIDC_TIMEOUT <= 30
+
+
+# --- A session ends when it should -----------------------------------------------------
+
+
+def test_signing_out_ends_the_session_for_a_copied_cookie(  # type: ignore[no-untyped-def]
+    oidc_client: TestClient, stub: OIDCStub, make_client
+) -> None:
+    assert login(oidc_client, stub).status_code == 303
+    cookie = oidc_client.cookies["portal_session"]
+    thief = make_client(PORTAL_OIDC_ISSUER=stub.issuer)
+    thief.cookies.set("portal_session", cookie)
+    assert thief.get("/", follow_redirects=False).status_code == 200
+    oidc_client.post("/logout", data={"csrf_token": csrf_of(oidc_client)})
+    assert thief.get("/", follow_redirects=False).status_code == 303
+
+
+def test_a_session_ends_after_its_time(
+    oidc_client: TestClient, stub: OIDCStub, db: Session
+) -> None:
+    assert login(oidc_client, stub).status_code == 303
+    assert oidc_client.get("/", follow_redirects=False).status_code == 200
+    db.execute(update(LoginSession).values(expires_at=datetime.now(UTC) - timedelta(seconds=1)))
+    db.commit()
+    assert oidc_client.get("/", follow_redirects=False).status_code == 303
+
+
+def test_a_session_lasts_an_hour_and_stores_no_cookie_secret(
+    oidc_client: TestClient, stub: OIDCStub, db: Session
+) -> None:
+    assert SESSION_SECONDS == 3600
+    assert login(oidc_client, stub).status_code == 303
+    row = db.scalars(select(LoginSession)).one()
+    assert row.expires_at <= datetime.now(UTC) + timedelta(seconds=SESSION_SECONDS)
+    assert row.id not in oidc_client.cookies["portal_session"]
+
+
+def test_signing_in_clears_expired_sessions(
+    oidc_client: TestClient, stub: OIDCStub, db: Session
+) -> None:
+    db.add(LoginSession(id="old", subject="x", expires_at=datetime.now(UTC) - timedelta(seconds=1)))
+    db.commit()
+    assert login(oidc_client, stub).status_code == 303
+    db.expire_all()
+    assert db.get(LoginSession, "old") is None
+
+
+# --- Only access tokens open the API ----------------------------------------------------
+
+
+def test_an_id_token_without_a_typ_claim_is_refused(make_client, stub: OIDCStub) -> None:  # type: ignore[no-untyped-def]
+    client = make_client(PORTAL_OIDC_ISSUER=stub.issuer)
+    for marks in ({"nonce": "n"}, {"at_hash": "h"}):
+        token = stub.access_token(**marks)
+        resp = client.get("/api/v1/whoami", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 401, marks
+
+
+def test_keycloak_access_tokens_may_carry_a_nonce(make_client, stub: OIDCStub) -> None:  # type: ignore[no-untyped-def]
+    """Older Keycloak versions copy it into access tokens, which also say what they are."""
+    client = make_client(PORTAL_OIDC_ISSUER=stub.issuer)
+    token = stub.access_token(typ="Bearer", nonce="n")
+    resp = client.get("/api/v1/whoami", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+
+
+def test_a_plain_access_token_is_accepted(make_client, stub: OIDCStub) -> None:  # type: ignore[no-untyped-def]
+    client = make_client(PORTAL_OIDC_ISSUER=stub.issuer)
+    token = stub.access_token()
+    resp = client.get("/api/v1/whoami", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200

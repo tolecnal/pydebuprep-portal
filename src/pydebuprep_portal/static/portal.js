@@ -66,10 +66,17 @@
     }
 
     const copyBtn = event.target.closest("[data-copy]");
-    if (copyBtn && navigator.clipboard) {
+    if (copyBtn && !navigator.clipboard) {
+      flash(copyBtn, "Needs HTTPS");
+      return;
+    }
+    if (copyBtn) {
       const target = copyBtn.dataset.copy || copyBtn.closest(".copy-box")?.querySelector("code, pre")?.textContent || "";
       if (target) {
-        navigator.clipboard.writeText(target.trim()).then(() => flash(copyBtn, "Copied!"));
+        navigator.clipboard.writeText(target.trim()).then(
+          () => flash(copyBtn, "Copied!"),
+          () => flash(copyBtn, "Copy failed"),
+        );
       }
     }
   });

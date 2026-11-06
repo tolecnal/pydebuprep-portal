@@ -3,8 +3,11 @@ for the API. Roles are read from the provider's groups at every sign-in."""
 
 from __future__ import annotations
 
+import hashlib
 import json
+import secrets
 import time
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 from urllib.parse import urlencode
 
@@ -16,15 +19,21 @@ from fastapi.responses import RedirectResponse, Response
 from joserfc import jwt
 from joserfc.errors import JoseError
 from joserfc.jwk import KeySet
+from sqlalchemy import delete
 from starlette.concurrency import run_in_threadpool
 
 from pydebuprep_portal.access import Viewer, roles_from_groups, teams_from_groups
+from pydebuprep_portal.models import LoginSession
 from pydebuprep_portal.security import require_csrf
 from pydebuprep_portal.settings import Settings
 from pydebuprep_portal.teams import ensure_teams
 from pydebuprep_portal.templating import error_page
 
 SESSION_USER = "user"
+SESSION_ID = "sid"
+# An hour limits how long a role lost in the provider lasts. While the provider's own session
+# lives, signing in again is only a redirect.
+SESSION_SECONDS = 3600
 # The signed-in user's part of the session cookie; the whole cookie must stay under 4 KB.
 MAX_SESSION_USER = 3000
 # A token signed with a key id the provider hasn't published makes us fetch its keys
@@ -91,11 +100,11 @@ def display_name(claims: dict[str, Any]) -> str:
 
 def _viewer(claims: dict[str, Any], settings: Settings) -> Viewer:
     groups = claims.get(settings.oidc_groups_claim)
-    teams, leads = teams_from_groups(groups, settings.group_prefix)
+    teams, leads = teams_from_groups(groups, settings.group_prefix, settings.group_parent)
     return Viewer(
         subject=str(claims["sub"]),
         name=display_name(claims),
-        roles=roles_from_groups(groups, settings.group_prefix),
+        roles=roles_from_groups(groups, settings.group_prefix, settings.group_parent),
         teams=teams,
         leads=leads,
     )
@@ -144,8 +153,10 @@ async def callback(request: Request) -> Response:
             "Ask your identity provider's admins to trim your pydebuprep groups.",
         )  # fmt: skip
     await run_in_threadpool(_ensure_teams, request, viewer.teams)
+    session_id = await run_in_threadpool(_start_session, request, viewer.subject)
     request.session.clear()  # a new session for the signed-in user
     request.session[SESSION_USER] = user
+    request.session[SESSION_ID] = session_id
     return RedirectResponse(next_path, status_code=303)
 
 
@@ -155,8 +166,47 @@ def _ensure_teams(request: Request, names: frozenset[str]) -> None:
         ensure_teams(session, names)
 
 
+def _hash_session_id(session_id: str) -> str:
+    return hashlib.sha256(session_id.encode()).hexdigest()
+
+
+def _start_session(request: Request, subject: str) -> str:
+    """Record a new session, and clear out the ones that have ended; its secret for the cookie."""
+    session_id = secrets.token_urlsafe(32)
+    now = datetime.now(UTC)
+    with request.app.state.sessionmaker() as session:
+        session.execute(delete(LoginSession).where(LoginSession.expires_at <= now))
+        session.add(
+            LoginSession(
+                id=_hash_session_id(session_id),
+                subject=subject,
+                expires_at=now + timedelta(seconds=SESSION_SECONDS),
+            )
+        )
+        session.commit()
+    return session_id
+
+
+def _session_key(request: Request) -> str:
+    """The key of the cookie's session; no row has the key of a cookie without one."""
+    return _hash_session_id(str(request.session.get(SESSION_ID)))
+
+
+def _session_alive(request: Request) -> bool:
+    with request.app.state.sessionmaker() as session:
+        row = session.get(LoginSession, _session_key(request))
+        return row is not None and row.expires_at > datetime.now(UTC)
+
+
+def _end_session(request: Request) -> None:
+    with request.app.state.sessionmaker() as session:
+        session.execute(delete(LoginSession).where(LoginSession.id == _session_key(request)))
+        session.commit()
+
+
 @router.post("/logout", dependencies=[Depends(require_csrf)])
 async def logout(request: Request) -> Response:
+    await run_in_threadpool(_end_session, request)
     request.session.clear()
     settings = _settings(request)
     try:
@@ -175,7 +225,9 @@ async def logout(request: Request) -> Response:
 def page_viewer(request: Request) -> Viewer:
     """Dependency for pages: the signed-in user, or a redirect to sign in."""
     user = request.session.get(SESSION_USER)
-    if not isinstance(user, dict):
+    if not isinstance(user, dict) or not _session_alive(request):
+        request.session.pop(SESSION_USER, None)
+        request.session.pop(SESSION_ID, None)
         path = request.url.path + (f"?{request.url.query}" if request.url.query else "")
         raise SignInRequired(path)
     return Viewer(
@@ -225,13 +277,25 @@ async def api_viewer(
             exp={"essential": True},
             sub={"essential": True},
         ).validate(token.claims)
-        if token.claims.get("typ") == "ID":  # an ID token is for the portal's sign-in only
+        if _is_id_token(token.header, token.claims):  # those are for the portal's sign-in only
             raise refused
     except httpx.HTTPError:
         raise HTTPException(503, PROVIDER_DOWN) from None
     except (JoseError, ValueError):
         raise refused from None
     return _viewer(token.claims, settings)
+
+
+def _is_id_token(header: dict[str, Any], claims: dict[str, Any]) -> bool:
+    """Keycloak says what a token is in its `typ` claim, others (RFC 9068) in its header. A
+    token saying neither is an ID token if it carries what only ID tokens need."""
+    if claims.get("typ") == "ID":
+        return True
+    is_access_token = claims.get("typ") == "Bearer" or str(header.get("typ", "")).lower() in (
+        "at+jwt",
+        "application/at+jwt",
+    )
+    return not is_access_token and ("nonce" in claims or "at_hash" in claims)
 
 
 def _may_refetch(request: Request) -> bool:

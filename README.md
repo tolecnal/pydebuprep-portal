@@ -73,7 +73,7 @@ The portal has no accounts of its own: an OpenID Connect provider is required. W
    standard flow). Valid redirect URI: `https://portal.example.com/auth/callback`;
    valid post-logout redirect URI: `https://portal.example.com/`.
 2. Add a **Group Membership** mapper to the client (token claim name `groups`; full
-   group path on or off, both work) with **Add to ID token** on. The portal reads the
+   group path on or off, both work, see below) with **Add to ID token** on. The portal reads the
    groups from the ID token at every sign-in; without the mapper nobody gets a role.
 3. Create the groups and add people:
    - `pydebuprep-admins` — admins: everything;
@@ -83,7 +83,12 @@ The portal has no accounts of its own: an OpenID Connect provider is required. W
 4. Put the issuer (`https://KEYCLOAK/realms/REALM`), the client id and its secret in
    `.env`.
 
-Losing a group in the provider removes the role at the next sign-in. Another provider
+A group counts only at the top level (`pydebuprep-admins` or `/pydebuprep-admins`): anyone
+who may create subgroups elsewhere could otherwise give themselves a role. If your groups
+live under one group, set `PORTAL_GROUP_PARENT=/org`.
+
+A session lasts an hour, and signing out ends it on the server. Losing a group in the
+provider removes the role at the next sign-in, so within the hour. Another provider
 works the same way, provided it puts the groups in a claim of the ID token
 (`PORTAL_OIDC_GROUPS_CLAIM`); the group names' prefix is `PORTAL_GROUP_PREFIX`.
 

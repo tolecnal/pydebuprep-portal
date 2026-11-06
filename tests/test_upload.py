@@ -283,3 +283,41 @@ def test_a_token_revoked_while_the_body_arrives_stores_nothing(db: Session, toke
         store_report(db, sample_json().encode(), row.id, datetime.now(UTC))
     assert exc.value.status == 401
     assert db.query(Report).count() == 0
+
+
+@pytest.mark.parametrize(
+    "when",
+    ["0001-01-01T00:00:00+14:00", "9999-12-31T23:59:59-14:00", "1999-12-31T23:59:59+00:00"],
+)
+def test_a_report_from_an_impossible_time_is_refused(
+    api: TestClient, token: str, signed_in: Callable[..., TestClient], when: str
+) -> None:
+    """Stored, such a time can't be read back, and every list holding it would fail."""
+    resp = post(api, token, sample_json(generated_at=when).encode())
+    assert resp.status_code == 422  # type: ignore[attr-defined]
+    assert "generated_at" in resp.text  # type: ignore[attr-defined]
+    assert signed_in("pydebuprep-admins").get("/").status_code == 200
+
+
+@pytest.mark.parametrize("when", ["0001-01-01T00:00:00+14:00", "9999-12-31T23:59:59-14:00"])
+def test_an_impossible_snapshot_time_is_shown_as_unknown(
+    api: TestClient, token: str, signed_in: Callable[..., TestClient], db: Session, when: str
+) -> None:
+    data = json.loads(sample_json())
+    data["baseline"] = {"path": "p", "created_at": when, "os_version": "12", "hostname": "web1"}
+    resp = post(api, token, json.dumps(data).encode())
+    report = db.get(Report, resp.json()["id"])  # type: ignore[attr-defined]
+    assert report is not None and report.baseline is True and report.baseline_at is None
+    assert signed_in("pydebuprep-admins").get(f"/reports/{report.id}").status_code == 200
+
+
+def test_a_number_too_long_to_read_is_refused(api: TestClient, token: str) -> None:
+    body = sample_json().replace('"critical":', '"zz": ' + "1" * 5000 + ', "critical":', 1)
+    assert post(api, token, body.encode()).status_code == 422  # type: ignore[attr-defined]
+
+
+def test_text_that_cannot_be_stored_is_refused(api: TestClient, token: str) -> None:
+    data = json.loads(sample_json())
+    data["results"][0]["findings"][0]["title"] = "half a character: \ud800"
+    resp = post(api, token, json.dumps(data).encode())
+    assert resp.status_code == 422  # type: ignore[attr-defined]

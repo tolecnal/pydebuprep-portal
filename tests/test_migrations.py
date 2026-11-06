@@ -29,6 +29,7 @@ def test_upgrade_from_empty_creates_the_tables(engine: Engine) -> None:
         "audit_log",
         "configs",
         "config_versions",
+        "login_sessions",
         "alembic_version",
     }
 

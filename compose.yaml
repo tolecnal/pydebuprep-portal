@@ -30,6 +30,14 @@ services:
     # (PORTAL_BIND=0.0.0.0 publishes it on every interface, for a preview.)
     ports:
       - "${PORTAL_BIND:-127.0.0.1}:${PORTAL_PORT:-8000}:8000"
+    # It needs no privileges, and writes nothing outside the database and /tmp.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
 volumes:

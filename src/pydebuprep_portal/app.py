@@ -22,7 +22,6 @@ from pydebuprep_portal.security import SecurityHeaders
 from pydebuprep_portal.settings import Settings, load_settings
 
 STATIC = Path(__file__).parent / "static"
-SESSION_SECONDS = 8 * 3600
 
 
 def create_app(settings: Settings, engine: Engine | None = None) -> FastAPI:
@@ -55,7 +54,7 @@ def create_app(settings: Settings, engine: Engine | None = None) -> FastAPI:
         SessionMiddleware,
         secret_key=settings.session_secret,
         session_cookie="portal_session",
-        max_age=SESSION_SECONDS,
+        max_age=auth.SESSION_SECONDS,
         same_site="lax",
         https_only=not settings.allow_http,
     )
