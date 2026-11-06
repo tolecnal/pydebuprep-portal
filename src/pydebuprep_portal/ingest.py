@@ -91,12 +91,12 @@ def parse(body: bytes) -> ReportData:
         report = load_report(text)
         raw = json.loads(text)
         problem = schema_problem(raw)
+        strings = list(_strings(raw))
     except ReportFileError as exc:
-        raise IngestError(422, f"not a pydebuprep report: {exc}") from None
+        reason = str(exc).removeprefix("not a pydebuprep report: ")
+        raise IngestError(422, f"not a pydebuprep report: {reason}") from None
     except RecursionError:
         raise IngestError(422, "the report is nested too deeply") from None
-    except ValueError:  # an integer longer than Python reads
-        raise IngestError(422, "the report holds a number too long to read") from None
     if problem:
         raise IngestError(422, f"does not match the report schema: {problem}")
     hostname = report.host.hostname
@@ -106,10 +106,10 @@ def parse(body: bytes) -> ReportData:
         raise IngestError(
             422, f"generated_at: {report.generated_at} is not a time between 2000 and 2100"
         )
-    for text in _strings(raw):
-        if "\x00" in text:
+    for string in strings:
+        if "\x00" in string:
             raise IngestError(422, "the report contains a NUL character, which can't be stored")
-        if not _valid_utf8(text):
+        if not _valid_utf8(string):
             raise IngestError(422, "the report contains half a character, which can't be stored")
     return report
 

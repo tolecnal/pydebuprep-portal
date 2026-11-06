@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.10.0 (2026-11-06)
 
+- Security fixes; see the advisory on GitHub.
+- Built on pydebuprep 0.14.0. Its reports are the same format, so hosts may upgrade before
+  or after the portal.
 - `generated_at` must fall between 2000 and 2100; a snapshot time outside that is shown as
   unknown.
 - A report with a number too long to read, or half a character (a lone surrogate), is

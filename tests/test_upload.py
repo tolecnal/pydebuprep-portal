@@ -321,3 +321,12 @@ def test_text_that_cannot_be_stored_is_refused(api: TestClient, token: str) -> N
     data["results"][0]["findings"][0]["title"] = "half a character: \ud800"
     resp = post(api, token, json.dumps(data).encode())
     assert resp.status_code == 422  # type: ignore[attr-defined]
+
+
+def test_a_deep_extra_field_is_refused(api: TestClient, token: str) -> None:
+    """Too deep for checking its strings, yet not too deep for the JSON parser."""
+    depth = 2000
+    body = sample_json().rstrip()[:-1] + ', "extra": ' + "[" * depth + "]" * depth + "}"
+    resp = post(api, token, body.encode())
+    assert resp.status_code == 422  # type: ignore[attr-defined]
+    assert "nested too deeply" in resp.text  # type: ignore[attr-defined]
