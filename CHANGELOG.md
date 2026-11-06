@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- `generated_at` must fall between 2000 and 2100; a snapshot time outside that is shown as
+  unknown.
+- A report with a number too long to read, or half a character (a lone surrogate), is
+  refused with a 422 instead of failing with a 500.
+- Pages and downloads are no longer kept in browser caches.
+- `compose.yaml` runs the portal with a read-only filesystem, no capabilities and
+  `no-new-privileges`.
+- **Upgrade note:** a role or team group now counts only at the top level of the provider's
+  groups. Before, any path ending in the name did, so whoever could create a subgroup
+  could make themselves an admin. If your groups live under one group, set
+  `PORTAL_GROUP_PARENT=/org` before upgrading, or their members lose their roles.
+- Sessions are kept on the server: signing out ends one for any copy of its cookie. They
+  last one hour instead of eight, which also limits how long a lost role lasts. Everyone
+  signs in again after the upgrade.
+- The API refuses ID tokens from every provider; it only recognised Keycloak's.
+- The machine ID's Copy button says when copying needs HTTPS, as the report Copy buttons do,
+  rather than doing nothing.
+
 ## 0.9.0 (2026-11-05)
 
 - Built on pydebuprep 0.13.0. Its reports are the same format as 0.12.0's, so hosts may

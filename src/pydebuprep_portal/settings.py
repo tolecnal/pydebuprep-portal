@@ -28,6 +28,7 @@ class Settings:
     oidc_metadata_url: str = ""  # where the provider's metadata is read; default: the issuer's
     oidc_groups_claim: str = "groups"
     group_prefix: str = "pydebuprep-"
+    group_parent: str = ""  # the one group path, such as /org, the portal's groups may be under
     allow_http: bool = False
 
 
@@ -52,8 +53,14 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         or f"{_required(env, 'PORTAL_OIDC_ISSUER').rstrip('/')}/.well-known/openid-configuration",
         oidc_groups_claim=env.get("PORTAL_OIDC_GROUPS_CLAIM") or "groups",
         group_prefix=env.get("PORTAL_GROUP_PREFIX") or "pydebuprep-",
+        group_parent=_group_parent(env.get("PORTAL_GROUP_PARENT", "")),
         allow_http=allow_http,
     )
+
+
+def _group_parent(value: str) -> str:
+    path = value.strip("/").lower()
+    return f"/{path}" if path else ""
 
 
 def _required(env: Mapping[str, str], name: str) -> str:

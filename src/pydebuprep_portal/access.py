@@ -28,17 +28,29 @@ class Viewer:
         return bool(self.roles & {"admin", "auditor"})
 
 
-def roles_from_groups(groups: object, prefix: str) -> frozenset[str]:
-    """Roles from the provider's group claim; Keycloak's `/a/b/group` paths count by name."""
+def _group_name(group: object, parent: str) -> str | None:
+    """A group's name in lower case, if it is `name`, `/name` or PARENT/name. Any other path
+    doesn't count: whoever may create subgroups somewhere in the provider could otherwise
+    give themselves a role by naming one `pydebuprep-admins`."""
+    if not isinstance(group, str):
+        return None
+    name = group.lower()
+    if parent and name.startswith(f"{parent}/"):
+        name = name[len(parent) + 1 :]
+    name = name.removeprefix("/")
+    return None if "/" in name else name
+
+
+def roles_from_groups(groups: object, prefix: str, parent: str = "") -> frozenset[str]:
+    """Roles from the provider's group claim."""
     if not isinstance(groups, list):
         return frozenset()
     roles = set()
     prefix = prefix.lower()
     for group in groups:
-        if isinstance(group, str):
-            name = group.rsplit("/", 1)[-1].lower()
-            if name.startswith(prefix) and name[len(prefix) :] in ROLES:
-                roles.add(ROLES[name[len(prefix) :]])
+        name = _group_name(group, parent)
+        if name is not None and name.startswith(prefix) and name[len(prefix) :] in ROLES:
+            roles.add(ROLES[name[len(prefix) :]])
     return frozenset(roles)
 
 
@@ -48,17 +60,17 @@ def valid_team_name(name: str) -> bool:
     return TEAM_NAME.fullmatch(name) is not None and not name.endswith(LEAD_SUFFIX)
 
 
-def teams_from_groups(groups: object, prefix: str) -> tuple[frozenset[str], frozenset[str]]:
+def teams_from_groups(
+    groups: object, prefix: str, parent: str = ""
+) -> tuple[frozenset[str], frozenset[str]]:
     """(teams, leads) from `<prefix>team-<team>` and `<prefix>team-<team>-lead` groups."""
     if not isinstance(groups, list):
         return frozenset(), frozenset()
     start = f"{prefix}team-".lower()
     teams, leads = set(), set()
     for group in groups:
-        if not isinstance(group, str):
-            continue
-        name = group.rsplit("/", 1)[-1].lower()
-        if not name.startswith(start):
+        name = _group_name(group, parent)
+        if name is None or not name.startswith(start):
             continue
         team = name[len(start) :]
         lead = team.endswith(LEAD_SUFFIX)

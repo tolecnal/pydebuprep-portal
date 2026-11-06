@@ -80,7 +80,9 @@ def test_hosts_page_filters_and_counts(admin: TestClient, fleet: None) -> None:
     assert '<option value="bookworm" selected>' in page
     counts = admin.get("/hosts").text
     assert "debian 13 (trixie)" in counts and "<strong>2</strong>" in counts
-    silent = admin.get("/hosts", params={"silent": "7"}).text
+    # Days since the middle of the fleet's October, so this holds whenever it runs.
+    days = (datetime.now(UTC) - datetime(2026, 10, 15, tzinfo=UTC)).days
+    silent = admin.get("/hosts", params={"silent": str(days)}).text
     assert 'href="/hosts/old1"' in silent and 'href="/hosts/new1"' not in silent
     assert 'href="/hosts/new2"' in admin.get("/hosts", params={"kernel": "6.12.9"}).text
 

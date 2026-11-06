@@ -39,6 +39,17 @@ DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 FALSE = text("false")
 
 
+class LoginSession(Base):
+    """A signed-in session. The browser's cookie holds a secret; this, its hash. Without a
+    row the cookie opens nothing, so signing out ends the session for any copy of it."""
+
+    __tablename__ = "login_sessions"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    subject: Mapped[str] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class Team(Base):
     __tablename__ = "teams"
     __table_args__ = (

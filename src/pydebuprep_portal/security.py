@@ -23,7 +23,8 @@ HSTS = "max-age=31536000"
 
 
 class SecurityHeaders(BaseHTTPMiddleware):
-    """PAGE_CSP unless the route set its own, plus nosniff, a same-origin referrer and,
+    """PAGE_CSP unless the route set its own, plus nosniff, a same-origin referrer, no
+    keeping in browser caches unless the route says otherwise (static files apart) and,
     behind https, HSTS."""
 
     def __init__(self, app: ASGIApp, hsts: bool = False) -> None:
@@ -37,6 +38,8 @@ class SecurityHeaders(BaseHTTPMiddleware):
         response.headers.setdefault("Content-Security-Policy", PAGE_CSP)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
+        if not request.url.path.startswith("/static/"):
+            response.headers.setdefault("Cache-Control", "no-store")
         return response
 
 
