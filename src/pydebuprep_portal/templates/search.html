@@ -35,7 +35,7 @@
     <td>{{ hit.generated_at | utc }}</td>
     <td>{{ hit.check_id }}</td>
     <td><span class="sev sev-{{ hit.severity }}">{{ hit.severity }}</span></td>
-    <td>{{ hit.title }}{% if hit.since_baseline %} <span class="flag upgrade" title="A change since the snapshot the report was compared with">since snapshot</span>{% endif %}</td>
+    <td>{{ hit.title }}{% if hit.since_snapshot %} <span class="flag">{{ hit.since_snapshot }}</span>{% endif %}{% if hit.since_baseline %} <span class="flag upgrade" title="A change since the snapshot the report was compared with">since snapshot</span>{% endif %}</td>
   </tr>
   {% endfor %}
   </tbody>

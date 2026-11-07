@@ -261,6 +261,7 @@ def _insert(
                     title=finding.title,
                     text=finding_text(finding.detail, finding.evidence),
                     since_baseline=any(finding is c for c in changes),
+                    since_snapshot=finding.since_snapshot,
                 )
             )
     session.add(report)

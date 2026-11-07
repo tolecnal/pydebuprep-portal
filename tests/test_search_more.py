@@ -202,6 +202,7 @@ def test_findings_as_csv_with_every_match(admin: TestClient, add_report: AddRepo
         "severity",
         "finding",
         "since_snapshot",
+        "label",
     ]
     assert {r[6] for r in rows[1:]} == {"no"}
     assert [r[1] for r in rows[1:]] == ["h2", "h1", "h0"]

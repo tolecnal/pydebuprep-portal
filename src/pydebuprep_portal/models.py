@@ -171,6 +171,8 @@ class Finding(Base):
     text: Mapped[str] = mapped_column(Text, server_default="")
     # A change since the snapshot the report was compared with, not a problem found now.
     since_baseline: Mapped[bool] = mapped_column(Boolean, server_default=FALSE)
+    # new, worse or pre-existing against what the snapshot's run found; NULL: not compared.
+    since_snapshot: Mapped[str | None] = mapped_column(Text)
 
     report: Mapped[Report] = relationship(back_populates="findings")
 

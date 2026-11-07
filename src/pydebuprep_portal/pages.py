@@ -9,6 +9,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydebuprep.checks import ALL_CHECKS
+from pydebuprep.model import ALREADY, NEW, WORSE
 from pydebuprep.render import FORMATS
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -151,6 +152,8 @@ def report_page(
         return _not_found(request)
     may_delete = may_delete_reports(viewer, report.team.name if report.team else None)
     changes = [f for f in report.findings if f.since_baseline]
+    new_findings = [f for f in report.findings if f.since_snapshot in (NEW, WORSE)]
+    already = sum(f.since_snapshot == ALREADY for f in report.findings)
     return page(
         request,
         "report.html",
@@ -160,7 +163,7 @@ def report_page(
         todo_list=todo_of(report.body),
         with_todo=todo,
         may_delete=may_delete,
-        compared=comparison(report), changes=changes,
+        compared=comparison(report), changes=changes, new_findings=new_findings, already=already,
     )  # fmt: skip
 
 
@@ -219,7 +222,9 @@ HOST_CSV = (
     "host", "release", "kernel", "newest report", "generated", "worst", "worst before",
     "machines",
 )  # fmt: skip
-FINDING_CSV = ("report", "host", "generated", "check", "severity", "finding", "since_snapshot")
+FINDING_CSV = (
+    "report", "host", "generated", "check", "severity", "finding", "since_snapshot", "label",
+)  # fmt: skip
 MAX_SILENT_DAYS = 36_500
 
 
@@ -410,7 +415,7 @@ def search_page(
             every = search_findings(session, viewer, **criteria, limit=MAX_ROWS)  # type: ignore[arg-type]
             return csv_response("findings", FINDING_CSV, (
                 (h.report_id, h.host, h.generated_at.isoformat(), h.check_id, h.severity, h.title,
-                 "yes" if h.since_baseline else "no")
+                 "yes" if h.since_baseline else "no", h.since_snapshot or "")
                 for h in every
             ))  # fmt: skip
         found = search_findings(

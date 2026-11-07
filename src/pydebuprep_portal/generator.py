@@ -99,6 +99,7 @@ REPORT_FIELDS = (
     _report_field("min_severity", "Lowest severity shown", "choice", tuple(SEVERITIES)),
     _report_field("todo", "TODO checklist", "bool"),
     _report_field("color", "Color", "bool"),
+    _report_field("snapshot_findings", "Record findings in snapshots", "bool"),
     Field(
         "report.baseline",
         "Baseline",
