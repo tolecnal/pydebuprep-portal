@@ -2,7 +2,8 @@
 
 ## 0.11.0 (2026-11-07)
 
-- Built on pydebuprep 0.15.1. **Upgrade the portal before the hosts:** a report compared with
+- Built on pydebuprep 0.15.1, the release after 0.14.0: 0.15.0 was tagged but never published,
+  as its package failed to build. **Upgrade the portal before the hosts:** a report compared with
   a snapshot taken by pydebuprep 0.15.1 carries a new field, which older portals refuse.
 - Findings are labelled new, worse or pre-existing against what the snapshot found. The report
   page counts them and lists what's new or worse first; search results, the search API and
