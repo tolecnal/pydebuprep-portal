@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.0 (2026-11-07)
+
+- Built on pydebuprep 0.16.0. Its reports are the same format as 0.15.1's, so hosts may
+  upgrade before or after the portal.
+- The config generator offers 0.16.0's new checks, `listeners` and `auth-config`. A host needs
+  0.16.0 before a config it fetches can set their options; older versions reject them.
+
 ## 0.11.0 (2026-11-07)
 
 - Built on pydebuprep 0.15.1, the release after 0.14.0: 0.15.0 was tagged but never published,
