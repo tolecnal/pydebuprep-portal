@@ -42,6 +42,10 @@ def defaults_form() -> dict[str, Any]:
     return form
 
 
+def test_snapshot_findings_can_be_set_in_a_config() -> None:
+    assert {f.key: f for f in all_fields()}["report.snapshot_findings"].kind == "bool"
+
+
 def test_every_check_and_option_is_offered() -> None:
     forms = {c.id: c for c in check_forms()}
     assert set(forms) == {cls.id for cls in checks.ALL_CHECKS}
@@ -76,6 +80,7 @@ def test_report_fields_and_choices() -> None:
         "report.min_severity",
         "report.todo",
         "report.color",
+        "report.snapshot_findings",
         "report.baseline",
     }
     assert fields["report.baseline"].choices == ("auto", "none")

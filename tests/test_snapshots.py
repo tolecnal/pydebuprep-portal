@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
+from typing import Any
 
 from fastapi.testclient import TestClient
 from pydebuprep.model import BaselineInfo
@@ -12,6 +14,7 @@ from sqlalchemy.orm import Session
 from pydebuprep_portal.access import Viewer
 from pydebuprep_portal.models import Report
 from pydebuprep_portal.queries import host_timeline, search_findings
+from sample import sample_json
 
 AddReport = Callable[..., Report]
 ADMIN = Viewer("a", "Admin", frozenset({"admin"}))
@@ -124,7 +127,7 @@ def test_search_for_changes_only(db: Session, admin: TestClient, add_report: Add
     assert 'name="changes"' in page and "eth1 lost its address" in page
     assert "Disk is full" not in page
     csv = admin.get("/search?changes=1&format=csv").text
-    assert csv.splitlines()[0].endswith(",since_snapshot") and ",yes" in csv
+    assert csv.splitlines()[0].endswith(",since_snapshot,label") and ",yes," in csv
 
 
 def test_api_has_the_snapshot(
@@ -152,3 +155,78 @@ def test_a_snapshot_that_doesnt_say_when_or_where(
     assert row.comparison == "compared"
     assert "1 change<" in admin.get("/hosts/web1").text
     assert "The snapshot taken at an unknown time." in admin.get(f"/reports/{report.id}").text
+
+
+# --- findings labelled against the snapshot's record -----------------------------------
+
+
+def _labelled_upload(api: TestClient, token: str, labels: dict[str, str]) -> Any:
+    data = json.loads(sample_json())
+    for result in data["results"]:
+        for finding in result["findings"]:
+            if finding["title"] in labels:
+                finding["since_snapshot"] = labels[finding["title"]]
+    return api.post(
+        "/api/v1/reports",
+        content=json.dumps(data),
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+
+
+LABELS = {"Repository still targets bookworm": "new", "Disk is full on /var": "pre-existing"}
+
+
+def test_labels_are_stored_with_findings(api: TestClient, token: str, db: Session) -> None:
+    resp = _labelled_upload(api, token, LABELS)
+    assert resp.status_code == 201
+    report = db.get(Report, resp.json()["id"])
+    assert report is not None
+    assert {f.title: f.since_snapshot for f in report.findings} == LABELS
+
+
+def test_an_unknown_label_is_refused(api: TestClient, token: str) -> None:
+    resp = _labelled_upload(api, token, {"Disk is full on /var": "<b>bad</b>"})
+    assert resp.status_code == 422
+
+
+def test_a_report_without_labels_stores_none(api: TestClient, token: str, db: Session) -> None:
+    resp = _labelled_upload(api, token, {})
+    report = db.get(Report, resp.json()["id"])
+    assert report is not None and {f.since_snapshot for f in report.findings} == {None}
+
+
+def test_the_report_page_leads_with_what_is_new(
+    api: TestClient, token: str, admin: TestClient
+) -> None:
+    labels = {**LABELS, "Repository still targets bookworm": "worse"}
+    report_id = _labelled_upload(api, token, labels).json()["id"]
+    page = admin.get(f"/reports/{report_id}").text
+    assert 'id="new-findings"' in page
+    table = page[page.index('id="new-findings"') :]
+    table = table[: table.index("</table>")]
+    assert "Repository still targets bookworm" in table and "worse" in table
+    assert "Disk is full on /var" not in table
+    assert "New or worse since the snapshot" in page
+    assert "Already there at the snapshot" in page
+
+
+def test_a_report_without_labels_has_no_such_section(
+    api: TestClient, token: str, admin: TestClient
+) -> None:
+    report_id = _labelled_upload(api, token, {}).json()["id"]
+    page = admin.get(f"/reports/{report_id}").text
+    assert 'id="new-findings"' not in page
+    assert "Already there at the snapshot" not in page
+
+
+def test_search_shows_labels(
+    api: TestClient, token: str, admin: TestClient, bearer: Callable[..., dict[str, str]]
+) -> None:
+    _labelled_upload(api, token, LABELS)
+    page = admin.get("/search", params={"words": "bookworm"}).text
+    assert '<span class="flag">new</span>' in page
+    found = admin.get("/api/v1/search/findings", headers=bearer("pydebuprep-admins")).json()
+    assert {f["title"]: f["since_snapshot"] for f in found["findings"]} == LABELS
+    rows = admin.get("/search", params={"words": "bookworm", "format": "csv"}).text.splitlines()
+    assert rows[0].endswith("since_snapshot,label")
+    assert any(row.endswith(",no,new") for row in rows[1:])

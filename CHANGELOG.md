@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.11.0 (2026-11-07)
+
+- Built on pydebuprep 0.15.1. **Upgrade the portal before the hosts:** a report compared with
+  a snapshot taken by pydebuprep 0.15.1 carries a new field, which older portals refuse.
+- Findings are labelled new, worse or pre-existing against what the snapshot found. The report
+  page counts them and lists what's new or worse first; search results, the search API and
+  the findings CSV show the label.
+- The config generator offers pydebuprep 0.15.1's new checks (`upgrade-log`, `boot-config`,
+  `package-config`, `storage-health`, `oom-events`) and options. A host needs 0.15.1 before
+  a config it fetches can set `snapshot_findings` or those options; older versions reject them.
+
 ## 0.10.0 (2026-11-06)
 
 - Security fixes; see the advisory on GitHub.

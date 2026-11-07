@@ -24,7 +24,22 @@
   <div class="stat info"><div class="label">Info</div><div class="value">{{ report.info }}</div></div>
   <div class="stat error"><div class="label">Checks that failed to run</div><div class="value">{{ report.error }}</div></div>
   {% if compared != "none" %}<div class="stat changes"><div class="label">Changes since the snapshot</div><div class="value">{{ report.changes }}</div></div>{% endif %}
+  {% if new_findings or already %}<div class="stat changes"><div class="label">New or worse since the snapshot</div><div class="value">{{ new_findings | length }}</div></div>
+  <div class="stat"><div class="label">Already there at the snapshot</div><div class="value">{{ already }}</div></div>{% endif %}
 </div>
+{% if new_findings %}
+<h2>New or worse since the snapshot</h2>
+<div class="table-wrap">
+<table id="new-findings">
+  <thead><tr><th>Check</th><th>Severity</th><th>Finding</th><th>Since the snapshot</th></tr></thead>
+  <tbody>
+  {% for finding in new_findings %}
+  <tr><td>{{ finding.check_id }}</td><td><span class="sev sev-{{ finding.severity }}">{{ finding.severity }}</span></td><td>{{ finding.title }}</td><td>{{ finding.since_snapshot }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
 {% if changes %}
 <h2>Changes since the snapshot</h2>
 <div class="table-wrap">

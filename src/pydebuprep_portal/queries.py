@@ -307,6 +307,7 @@ class FindingHit:
     severity: str
     title: str
     since_baseline: bool
+    since_snapshot: str | None
 
 
 MAX_SEARCH_WORDS = 20
@@ -340,6 +341,7 @@ def search_findings(
             Finding.severity,
             Finding.title,
             Finding.since_baseline,
+            Finding.since_snapshot,
         )
         .join(Finding.report)
         .join(Report.host)

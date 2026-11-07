@@ -316,6 +316,9 @@ class FindingOut(BaseModel):
     severity: str
     title: str
     since_baseline: bool = Field(description="A change since the report's snapshot")
+    since_snapshot: str | None = Field(
+        description="new, worse or pre-existing against what the snapshot found; null if unknown"
+    )
 
 
 class FindingList(BaseModel):
