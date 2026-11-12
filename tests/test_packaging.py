@@ -53,10 +53,10 @@ def test_env_example_lists_every_setting() -> None:
     assert "PORTAL_FORWARDED_ALLOW_IPS" in example and "POSTGRES_PASSWORD" in example
 
 
-def test_requirements_pin_pydebuprep_0_16_0() -> None:
+def test_requirements_pin_pydebuprep_0_17_0() -> None:
     text = (ROOT / "requirements.txt").read_text()
     assert re.search(
-        r"^pydebuprep @ https://github\.com/tolecnal/pydebuprep/archive/refs/tags/v0\.16\.0\.tar\.gz \\\n"
+        r"^pydebuprep @ https://github\.com/tolecnal/pydebuprep/archive/refs/tags/v0\.17\.0\.tar\.gz \\\n"
         r"\s+--hash=sha256:[0-9a-f]{64}$",
         text,
         re.MULTILINE,

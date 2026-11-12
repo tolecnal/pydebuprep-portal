@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.0 (2026-11-12)
+
+- Built on pydebuprep 0.17.0. Its reports are the same format, so hosts may upgrade before
+  or after the portal.
+- Security: a config's `protected_packages` must be package names. The values go into a
+  command that reports suggest running as root, and anyone who may edit a team's configs
+  could put shell text there. A stored config that has such a value is no longer served
+  until it's saved again without it.
+- Dependencies: python-multipart 0.0.33; the preview's Keycloak is 26.8.2.
+
 ## 0.12.0 (2026-11-07)
 
 - Built on pydebuprep 0.16.0. Its reports are the same format as 0.15.1's, so hosts may
