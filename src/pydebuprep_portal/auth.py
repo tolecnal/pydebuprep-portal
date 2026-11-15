@@ -8,7 +8,7 @@ import json
 import secrets
 import time
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 from urllib.parse import urlencode
 
 import httpx
@@ -128,10 +128,11 @@ async def login(request: Request, next: str | None = None) -> Response:
 async def callback(request: Request) -> Response:
     settings = _settings(request)
     try:
-        token = await _client(request).authorize_access_token(  # type: ignore[no-untyped-call]
+        token = await _client(request).authorize_access_token(
             request, claims_options={"iss": {"values": [settings.oidc_issuer]}}
         )
-        claims = dict(token["userinfo"])
+        # The stubs give a token value no type; dict() still refuses what is not a mapping.
+        claims = dict(cast("dict[str, Any]", token["userinfo"]))
     except (OAuthError, JoseError, httpx.HTTPError, KeyError, TypeError, ValueError):
         return error_page(
             request, 400, "Sign-in failed", "The sign-in could not be completed. Try again."
