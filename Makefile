@@ -10,11 +10,17 @@ venv:
 	.venv/bin/pip install -q --require-hashes -r requirements-dev.txt
 	.venv/bin/pip install -q --no-deps -e .
 
+# Dependabot reruns these with pip-compile and the options in each file's header. Naming
+# an unsafe package no file needs keeps setuptools out of the closing "unsafe" section
+# it would delete; --strip-extras keeps names such as psycopg as uv writes them.
+LOCK = uv pip compile -q --python-version 3.12 --generate-hashes --strip-extras \
+	--unsafe-package distribute
+
 lock:
-	uv pip compile -q --python-version 3.12 --generate-hashes requirements.in -o requirements.txt
-	uv pip compile -q --python-version 3.12 --generate-hashes requirements-dev.in -o requirements-dev.txt
-	uv pip compile -q --python-version 3.12 --generate-hashes requirements-build.in -o requirements-build.txt
-	uv pip compile -q --python-version 3.12 --generate-hashes requirements-audit.in -o requirements-audit.txt
+	$(LOCK) requirements.in -o requirements.txt
+	$(LOCK) requirements-dev.in -o requirements-dev.txt
+	$(LOCK) requirements-build.in -o requirements-build.txt
+	$(LOCK) requirements-audit.in -o requirements-audit.txt
 
 lint:
 	$(PYTHON) -m ruff check src tests

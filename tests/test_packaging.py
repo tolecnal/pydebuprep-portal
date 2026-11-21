@@ -66,6 +66,22 @@ def test_requirements_pin_pydebuprep_0_17_0() -> None:
     assert pinned and f"setuptools=={pinned.group(1)} \\" in text  # the same version in both
 
 
+@pytest.mark.parametrize(
+    "name", ["requirements", "requirements-dev", "requirements-build", "requirements-audit"]
+)
+def test_lock_header_keeps_dependabot_from_dropping_setuptools(name: str) -> None:
+    # Dependabot reruns these with pip-compile and the options it finds in the header. Its
+    # default unsafe packages (setuptools among them) go to a closing section that it then
+    # deletes, so the header names an unsafe package no file needs; --strip-extras keeps
+    # the names as uv writes them.
+    _, header, body = (ROOT / f"{name}.txt").read_text().split("\n", 2)
+    assert header == (
+        "#    uv pip compile --python-version 3.12 --generate-hashes --strip-extras"
+        f" --unsafe-package distribute {name}.in -o {name}.txt"
+    )
+    assert "distribute" not in body
+
+
 def test_readme_covers_setup() -> None:
     text = (ROOT / "README.md").read_text()
     for topic in ("docker compose", "Keycloak", "pydebuprep-admins", "pydebuprep-auditors",
