@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.1 (2026-11-21)
+
+- Still on pydebuprep 0.17.0; no change to features or to the report format.
+- Dependencies: authlib 1.9.5, FastAPI 0.162.7, psycopg 3.3.9, SQLAlchemy 2.1.8.
+- Dependabot's updates of the lock files no longer drop setuptools, which the image
+  builds with.
+
 ## 0.13.0 (2026-11-12)
 
 - Built on pydebuprep 0.17.0. Its reports are the same format, so hosts may upgrade before
